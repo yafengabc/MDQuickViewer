@@ -215,18 +215,30 @@ func wndProcPreview(hwnd, msg, wParam, lParam uintptr) uintptr {
 		hdc := beginPaint(windows.HWND(hwnd), &ps)
 		var rc RECT
 		getClientRect(windows.HWND(hwnd), &rc)
-		if app.doc != nil {
-			app.doc.paint(hdc, app.scroll, rc.Right-rc.Left, rc.Bottom-rc.Top)
+		w := rc.Right - rc.Left
+		h := rc.Bottom - rc.Top
+		paintPreview := func(target HDC) {
+			if app.doc != nil {
+				app.doc.paint(target, app.scroll, w, h)
+			} else {
+				var br RECT
+				br.Right = w
+				br.Bottom = h
+				b := createSolidBrush(COLORREF(0xFFFFFF))
+				fillRect(target, &br, b)
+				deleteObject(HGDIOBJ(b))
+				setBkMode(target, TRANSPARENT)
+				setTextColor(target, COLORREF(0x999999))
+				textOut(target, LM, TM, "从菜单或工具栏打开一个 Markdown 文件开始阅读")
+			}
+		}
+		// 双缓冲：整帧先画到内存位图，再一次性拷到窗口，避免拖选时闪烁
+		if bp := beginBufferedPaint(hdc, w, h); bp.ok {
+			paintPreview(bp.dc)
+			bp.flush(hdc, w, h)
+			bp.end()
 		} else {
-			var br RECT
-			br.Right = rc.Right
-			br.Bottom = rc.Bottom
-			b := createSolidBrush(COLORREF(0xFFFFFF))
-			fillRect(hdc, &br, b)
-			deleteObject(HGDIOBJ(b))
-			setBkMode(hdc, TRANSPARENT)
-			setTextColor(hdc, COLORREF(0x999999))
-			textOut(hdc, LM, TM, "从菜单或工具栏打开一个 Markdown 文件开始阅读")
+			paintPreview(hdc) // 内存位图创建失败时降级为直接绘制
 		}
 		endPaint(windows.HWND(hwnd), &ps)
 		return 0

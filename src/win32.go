@@ -90,37 +90,39 @@ var (
 	procSetMenuDefaultItem   = user32.NewProc("SetMenuDefaultItem")
 	procGetSubMenu           = user32.NewProc("GetSubMenu")
 
-	procCreateFontIndirectW   = gdi32.NewProc("CreateFontIndirectW")
-	procCreateCompatibleDC    = gdi32.NewProc("CreateCompatibleDC")
-	procCreateDIBSection      = gdi32.NewProc("CreateDIBSection")
-	procDeleteDC              = gdi32.NewProc("DeleteDC")
-	procSelectObject          = gdi32.NewProc("SelectObject")
-	procDeleteObject          = gdi32.NewProc("DeleteObject")
-	procGetObjectW            = gdi32.NewProc("GetObjectW")
-	procGetTextExtentPoint32W = gdi32.NewProc("GetTextExtentPoint32W")
-	procSetTextColor          = gdi32.NewProc("SetTextColor")
-	procSetBkMode             = gdi32.NewProc("SetBkMode")
-	procSetBkColor            = gdi32.NewProc("SetBkColor")
-	procTextOutW              = gdi32.NewProc("TextOutW")
-	procDrawTextW             = gdi32.NewProc("DrawTextW")
-	procExtTextOutW           = gdi32.NewProc("ExtTextOutW")
-	procCreateSolidBrush      = gdi32.NewProc("CreateSolidBrush")
-	procFillRect              = user32.NewProc("FillRect")
-	procFillPath              = gdi32.NewProc("FillPath")
-	procRectangle             = gdi32.NewProc("Rectangle")
-	procRoundRect             = gdi32.NewProc("RoundRect")
-	procEllipse               = gdi32.NewProc("Ellipse")
-	procCreatePen             = gdi32.NewProc("CreatePen")
-	procMoveToEx              = gdi32.NewProc("MoveToEx")
-	procLineTo                = gdi32.NewProc("LineTo")
-	procGetDeviceCaps         = gdi32.NewProc("GetDeviceCaps")
-	procGetTextMetricsW       = gdi32.NewProc("GetTextMetricsW")
-	procGetStockObject        = gdi32.NewProc("GetStockObject")
-	procSetTextAlign          = gdi32.NewProc("SetTextAlign")
-	procSetMapMode            = gdi32.NewProc("SetMapMode")
-	procSaveDC                = gdi32.NewProc("SaveDC")
-	procRestoreDC             = gdi32.NewProc("RestoreDC")
-	procGetClipBox            = gdi32.NewProc("GetClipBox")
+	procCreateFontIndirectW    = gdi32.NewProc("CreateFontIndirectW")
+	procCreateCompatibleDC     = gdi32.NewProc("CreateCompatibleDC")
+	procCreateDIBSection       = gdi32.NewProc("CreateDIBSection")
+	procCreateCompatibleBitmap = gdi32.NewProc("CreateCompatibleBitmap")
+	procBitBlt                 = gdi32.NewProc("BitBlt")
+	procDeleteDC               = gdi32.NewProc("DeleteDC")
+	procSelectObject           = gdi32.NewProc("SelectObject")
+	procDeleteObject           = gdi32.NewProc("DeleteObject")
+	procGetObjectW             = gdi32.NewProc("GetObjectW")
+	procGetTextExtentPoint32W  = gdi32.NewProc("GetTextExtentPoint32W")
+	procSetTextColor           = gdi32.NewProc("SetTextColor")
+	procSetBkMode              = gdi32.NewProc("SetBkMode")
+	procSetBkColor             = gdi32.NewProc("SetBkColor")
+	procTextOutW               = gdi32.NewProc("TextOutW")
+	procDrawTextW              = gdi32.NewProc("DrawTextW")
+	procExtTextOutW            = gdi32.NewProc("ExtTextOutW")
+	procCreateSolidBrush       = gdi32.NewProc("CreateSolidBrush")
+	procFillRect               = user32.NewProc("FillRect")
+	procFillPath               = gdi32.NewProc("FillPath")
+	procRectangle              = gdi32.NewProc("Rectangle")
+	procRoundRect              = gdi32.NewProc("RoundRect")
+	procEllipse                = gdi32.NewProc("Ellipse")
+	procCreatePen              = gdi32.NewProc("CreatePen")
+	procMoveToEx               = gdi32.NewProc("MoveToEx")
+	procLineTo                 = gdi32.NewProc("LineTo")
+	procGetDeviceCaps          = gdi32.NewProc("GetDeviceCaps")
+	procGetTextMetricsW        = gdi32.NewProc("GetTextMetricsW")
+	procGetStockObject         = gdi32.NewProc("GetStockObject")
+	procSetTextAlign           = gdi32.NewProc("SetTextAlign")
+	procSetMapMode             = gdi32.NewProc("SetMapMode")
+	procSaveDC                 = gdi32.NewProc("SaveDC")
+	procRestoreDC              = gdi32.NewProc("RestoreDC")
+	procGetClipBox             = gdi32.NewProc("GetClipBox")
 
 	procInitCommonControlsEx = comctl32.NewProc("InitCommonControlsEx")
 	procImageList_Create     = comctl32.NewProc("ImageList_Create")
@@ -997,6 +999,61 @@ func createDIBSection(hdc HDC, hdr *BITMAPINFOHEADER, usage uint32, bitsOut *uin
 		uintptr(unsafe.Pointer(hdr)), uintptr(usage),
 		uintptr(unsafe.Pointer(bitsOut)), section, uintptr(offset))
 	return HBITMAP(r)
+}
+
+func createCompatibleBitmap(hdc HDC, w, h int32) HBITMAP {
+	r, _, _ := callX(procCreateCompatibleBitmap, 3, uintptr(hdc), uintptr(w), uintptr(h))
+	return HBITMAP(r)
+}
+
+func bitBlt(dst HDC, dx, dy, w, h int32, src HDC, sx, sy int32, rop uint32) bool {
+	r, _, _ := callX(procBitBlt, 9, uintptr(dst), uintptr(dx), uintptr(dy),
+		uintptr(w), uintptr(h), uintptr(src), uintptr(sx), uintptr(sy), uintptr(rop))
+	return r != 0
+}
+
+// ---------------------------------------------------------------- 双缓冲
+const SRCCOPY = 0x00CC0020 // 光栅操作：直接拷贝
+
+// 先把一帧画到内存位图上，最后一次 BitBlt 拷到窗口 DC，避免"先刷白底再画字"造成的闪烁。
+type bufferedPaint struct {
+	dc  HDC
+	bmp HBITMAP
+	old HGDIOBJ
+	ok  bool
+}
+
+func beginBufferedPaint(hdc HDC, w, h int32) bufferedPaint {
+	if w <= 0 || h <= 0 {
+		return bufferedPaint{}
+	}
+	mem := createCompatibleDC(hdc)
+	if mem == 0 {
+		return bufferedPaint{}
+	}
+	bmp := createCompatibleBitmap(hdc, w, h)
+	if bmp == 0 {
+		deleteDC(mem)
+		return bufferedPaint{}
+	}
+	return bufferedPaint{dc: mem, bmp: bmp, old: selectObject(mem, HGDIOBJ(bmp)), ok: true}
+}
+
+// flush 把离屏内容一次性拷到目标 DC。
+func (b bufferedPaint) flush(dst HDC, w, h int32) {
+	if !b.ok {
+		return
+	}
+	bitBlt(dst, 0, 0, w, h, b.dc, 0, 0, SRCCOPY)
+}
+
+func (b bufferedPaint) end() {
+	if !b.ok {
+		return
+	}
+	selectObject(b.dc, b.old)
+	deleteObject(HGDIOBJ(b.bmp))
+	deleteDC(b.dc)
 }
 
 func selectObject(hdc HDC, obj HGDIOBJ) HGDIOBJ {
