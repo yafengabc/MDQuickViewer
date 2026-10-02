@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 	"unicode/utf16"
@@ -203,11 +204,60 @@ func listProcessWindows(pid uint32) []string {
 }
 
 var (
-	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	kernel32      = windows.NewLazySystemDLL("kernel32.dll")
 	pGlobalAlloc  = kernel32.NewProc("GlobalAlloc")
 	pGlobalLock   = kernel32.NewProc("GlobalLock")
 	pGlobalUnlock = kernel32.NewProc("GlobalUnlock")
+
+	pOpenClipboard    = user32.NewProc("OpenClipboard")
+	pCloseClipboard   = user32.NewProc("CloseClipboard")
+	pGetClipboardData = user32.NewProc("GetClipboardData")
 )
+
+// clipboardText 读取剪贴板里的 CF_UNICODETEXT 文本。
+func clipboardText() string {
+	const CF_UNICODETEXT = 13
+	if r, _, _ := pOpenClipboard.Call(0); r == 0 {
+		return "<打开剪贴板失败>"
+	}
+	defer pCloseClipboard.Call()
+	h, _, _ := pGetClipboardData.Call(CF_UNICODETEXT)
+	if h == 0 {
+		return "<剪贴板无文本>"
+	}
+	p, _, _ := pGlobalLock.Call(h)
+	if p == 0 {
+		return "<GlobalLock 失败>"
+	}
+	defer pGlobalUnlock.Call(h)
+	// 以 NUL 结尾的 UTF-16
+	n := 0
+	for {
+		c := *(*uint16)(unsafe.Pointer(uintptr(p) + uintptr(n*2)))
+		if c == 0 {
+			break
+		}
+		n++
+	}
+	slice := unsafe.Slice((*uint16)(unsafe.Pointer(p)), n)
+	return windows.UTF16ToString(slice)
+}
+
+// dragSelect 在 preview 上模拟一次鼠标拖选（按下→移动→松开）。
+func dragSelect(preview windows.HWND, x0, y0, x1, y1 int32) {
+	mk := func(x, y int32) uintptr { return uintptr(uint32(uint16(x)) | uint32(uint16(y))<<16) }
+	pPostMessage.Call(uintptr(preview), 0x0201, 1, mk(x0, y0)) // WM_LBUTTONDOWN
+	time.Sleep(200 * time.Millisecond)
+	steps := 6
+	for i := 1; i <= steps; i++ {
+		x := x0 + (x1-x0)*int32(i)/int32(steps)
+		y := y0 + (y1-y0)*int32(i)/int32(steps)
+		pPostMessage.Call(uintptr(preview), 0x0200, 1, mk(x, y)) // WM_MOUSEMOVE
+		time.Sleep(60 * time.Millisecond)
+	}
+	pPostMessage.Call(uintptr(preview), 0x0202, 0, mk(x1, y1)) // WM_LBUTTONUP
+	time.Sleep(400 * time.Millisecond)
+}
 
 type POINT struct{ X, Y int32 }
 
@@ -307,6 +357,22 @@ func main() {
 				fmt.Println("已保存", p)
 			}
 		}
+	}
+
+	// 模拟在预览区拖选文本 → 截图 → Ctrl+C（发 WM_COMMAND 1004）→ 读剪贴板
+	if preview != 0 {
+		dragSelect(preview, 60, 45, 430, 150)
+		if r, err := getWindowRect(main); err == nil {
+			p := filepath.Join(outDir, "shot_selection.png")
+			if err := capture(r.Left, r.Top, r.Right-r.Left, r.Bottom-r.Top, p); err != nil {
+				fmt.Println("抓选区失败:", err)
+			} else {
+				fmt.Println("已保存", p)
+			}
+		}
+		pPostMessage.Call(uintptr(main), 0x0111, 1004, 0) // IDM_COPY
+		time.Sleep(600 * time.Millisecond)
+		fmt.Println("剪贴板内容 =", strconv.Quote(clipboardText()))
 	}
 
 	// 切换文件列表显示 (IDM_TOGGLELIST = 1010)，验证单列文件列表

@@ -16,6 +16,8 @@ const (
 	IDM_OPENFILE   = 1001
 	IDM_OPENFOLDER = 1002
 	IDM_RELOAD     = 1003
+	IDM_COPY       = 1004
+	IDM_SELECTALL  = 1005
 	IDM_EXIT       = 1009
 	IDM_TOGGLELIST = 1010
 	IDM_ZOOMIN     = 1020
@@ -142,6 +144,11 @@ func createMenuBar() {
 	appendMenu(fm, MF_STRING, IDM_EXIT, "退出\tAlt+F4")
 	appendMenu(m, MF_POPUP|MF_STRING, uintptr(fm), "文件")
 
+	em := createPopupMenu()
+	appendMenu(em, MF_STRING, IDM_COPY, "复制选中文本\tCtrl+C")
+	appendMenu(em, MF_STRING, IDM_SELECTALL, "全选\tCtrl+A")
+	appendMenu(m, MF_POPUP|MF_STRING, uintptr(em), "编辑")
+
 	vm := createPopupMenu()
 	appendMenu(vm, MF_STRING, IDM_TOGGLELIST, "显示/隐藏文件列表\tCtrl+L")
 	appendMenu(vm, MF_SEPARATOR, 0, "")
@@ -196,6 +203,7 @@ func loadFile(path string) {
 	d := ParseMarkdown(data, path)
 	app.doc = d
 	app.scroll = 0
+	clearSelection() // 行索引变了，旧选区失效
 	relayout()
 	setWindowText(app.mainWnd, "gomd — "+filepath.Base(path))
 	if d.contentHeight > 0 {
@@ -371,6 +379,7 @@ func zoom(factor float64) {
 	if renderScale > 3.0 {
 		renderScale = 3.0
 	}
+	clearSelection() // 缩放后行布局改变
 	relayout()
 	invalidateRect(app.preview, nil, true)
 }
@@ -386,7 +395,8 @@ func about() {
 		"纯 Go + Win32 API 实现，无 WebView、无第三方 GUI 库。\n" +
 		"渲染基于 goldmark 解析、GDI 自绘。\n\n" +
 		"快捷键：Ctrl+O 打开文件，Ctrl+F 打开文件夹，\n" +
-		"Ctrl+L 切换列表，Ctrl+滚轮 缩放，F5 重新加载。"
+		"Ctrl+L 切换列表，鼠标拖选文本后 Ctrl+C 复制，\n" +
+		"Ctrl+A 全选，Ctrl+滚轮 缩放，F5 重新加载。"
 	messageBox(app.mainWnd, msg, "关于 gomd", MB_ICONINFORMATION)
 }
 
@@ -400,6 +410,10 @@ func onCommand(id uintptr) {
 		if app.doc != nil {
 			loadFile(app.doc.path)
 		}
+	case IDM_COPY:
+		copySelection()
+	case IDM_SELECTALL:
+		selectAllText()
 	case IDM_EXIT:
 		destroyWindow(app.mainWnd)
 	case IDM_TOGGLELIST:

@@ -202,17 +202,58 @@ func wndProcPreview(hwnd, msg, wParam, lParam uintptr) uintptr {
 		if app.doc != nil {
 			x := int32(uint16(uintptr(lParam)))
 			y := int32(int16(uint16(uintptr(lParam) >> 16)))
-			cy := y + app.scroll
-			dest := app.doc.hitLink(x, cy)
-			if dest != "" {
-				openLink(dest)
-			}
+			// 开始可能的拖选：先记录锚点并捕获鼠标
+			selAnchor = app.doc.hitPos(x, y+app.scroll)
+			selHead = selAnchor
+			selOn = false
+			selDrag = true
+			setCapture(windows.HWND(hwnd))
+			invalidateRect(windows.HWND(hwnd), nil, false)
 		}
 		return 0
 	case WM_MOUSEMOVE:
-		app.mouseX = int32(uint16(uintptr(lParam)))
-		app.mouseY = int32(int16(uint16(uintptr(lParam) >> 16)))
-		updatePreviewCursor()
+		if app.doc != nil {
+			x := int32(uint16(uintptr(lParam)))
+			y := int32(int16(uint16(uintptr(lParam) >> 16)))
+			app.mouseX, app.mouseY = x, y
+			if selDrag {
+				// 拖出可视区时自动滚动
+				var rc RECT
+				getClientRect(windows.HWND(hwnd), &rc)
+				if y < 0 {
+					app.scroll -= 24
+				} else if y > rc.Bottom-rc.Top {
+					app.scroll += 24
+				}
+				selHead = app.doc.hitPos(x, y+app.scroll)
+				selOn = !selAnchor.equal(selHead)
+				clampScroll()
+				invalidateRect(windows.HWND(hwnd), nil, false)
+			}
+			updatePreviewCursor()
+		}
+		return 0
+	case WM_LBUTTONUP:
+		if app.doc != nil {
+			x := int32(uint16(uintptr(lParam)))
+			y := int32(int16(uint16(uintptr(lParam) >> 16)))
+			if selDrag {
+				selDrag = false
+				releaseCapture()
+				selHead = app.doc.hitPos(x, y+app.scroll)
+				selOn = !selAnchor.equal(selHead)
+				if !selOn {
+					// 单击（没有拖出选区）：保持原有的打开链接行为
+					if dest := app.doc.hitLink(x, y+app.scroll); dest != "" {
+						openLink(dest)
+					}
+				}
+				invalidateRect(windows.HWND(hwnd), nil, false)
+			}
+		}
+		return 0
+	case WM_KEYDOWN:
+		onKeyDown(wParam)
 		return 0
 	case WM_SETCURSOR:
 		updatePreviewCursor()
@@ -260,6 +301,14 @@ func onKeyDown(wParam uintptr) {
 	case 'L':
 		if ctrl {
 			toggleList()
+		}
+	case 'C':
+		if ctrl {
+			copySelection()
+		}
+	case 'A':
+		if ctrl {
+			selectAllText()
 		}
 	case '=':
 		if ctrl {

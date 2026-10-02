@@ -51,7 +51,6 @@ func TestRenderStress(t *testing.T) {
 		"\n" +
 		"结尾段落。\n"
 
-
 	doc := ParseMarkdown([]byte(md), "stress.md")
 	W := int32(900)
 	doc.layout(W)

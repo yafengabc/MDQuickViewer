@@ -15,12 +15,12 @@ import (
 
 // ---------------------------------------------------------------- rendering constants
 const (
-	LM    int32 = 48
-	RM    int32 = 48
-	TM    int32 = 30
-	Lead  int32 = 4
-	bodyPx int  = 15
-	codePx int  = 14
+	LM     int32 = 48
+	RM     int32 = 48
+	TM     int32 = 30
+	Lead   int32 = 4
+	bodyPx int   = 15
+	codePx int   = 14
 )
 
 var renderScale float32 = 1.0
@@ -113,23 +113,23 @@ type tableRow struct {
 	header bool
 }
 type TableData struct {
-	cols    int
-	colX    []int32
-	colW    []int32
-	rows    []*tableRow
-	x0, x1  int32
+	cols   int
+	colX   []int32
+	colW   []int32
+	rows   []*tableRow
+	x0, x1 int32
 }
 
 type runItem struct {
-	text    string
-	family  string
-	px      int
-	bold    bool
-	italic  bool
-	code    bool
-	strike  bool
-	color   COLORREF
-	link    string
+	text      string
+	family    string
+	px        int
+	bold      bool
+	italic    bool
+	code      bool
+	strike    bool
+	color     COLORREF
+	link      string
 	underline bool
 }
 
@@ -151,20 +151,22 @@ type VisualLine struct {
 	units   []drawUnit
 	marker  string
 	markerX int32
+	// wrap=true 表示本行是上一行的折行续行（复制时不应在行尾插入换行）
+	wrap bool
 }
 
 type LinkRect struct {
 	x, y, w, h int32
-	dest      string
+	dest       string
 }
 
 type Doc struct {
-	src          []byte
-	blocks       []*Block
-	lines        []VisualLine
-	linkRects    []LinkRect
+	src           []byte
+	blocks        []*Block
+	lines         []VisualLine
+	linkRects     []LinkRect
 	contentHeight int32
-	path         string
+	path          string
 }
 
 // ---------------------------------------------------------------- parsing
@@ -267,10 +269,10 @@ func buildList(l *ast.List, src []byte, out *[]*Block, depth int, quote bool) {
 		for cc := li.FirstChild(); cc != nil; cc = cc.NextSibling() {
 			if p, ok := cc.(*ast.Paragraph); ok {
 				if f := p.FirstChild(); f != nil {
-				if tcb, ok := f.(*extast.TaskCheckBox); ok {
-					b := tcb.IsChecked
-					taskChecked = &b
-				}
+					if tcb, ok := f.(*extast.TaskCheckBox); ok {
+						b := tcb.IsChecked
+						taskChecked = &b
+					}
 				}
 			}
 		}
@@ -769,11 +771,12 @@ func (d *Doc) doCode(b *Block, idx int, width, y0 int32) int32 {
 		curX := x0
 		lineH := int32(effPx(codePx) * 3 / 2)
 		firstIdx := -1
+		isWrap := false
 		flush := func() {
 			if len(curUnits) == 0 {
 				return
 			}
-			vl := VisualLine{block: idx, y: y, height: lineH, units: curUnits}
+			vl := VisualLine{block: idx, y: y, height: lineH, units: curUnits, wrap: isWrap}
 			if firstIdx < 0 {
 				firstIdx = len(d.lines)
 			}
@@ -781,11 +784,13 @@ func (d *Doc) doCode(b *Block, idx int, width, y0 int32) int32 {
 			y += lineH + 2
 			curX = x0
 			curUnits = nil
+			isWrap = false
 		}
 		for _, tk := range toks {
 			it := runItem{text: tk, family: codeFont, px: codePx, code: true, color: colCode}
 			w := measureItem(it, tk)
 			if curX+w > x0+avail && curX > x0 {
+				isWrap = true
 				flush()
 			}
 			if n := len(curUnits); n > 0 && sameItem(curUnits[n-1].item, it) {
@@ -806,11 +811,12 @@ func (d *Doc) wrapUnits(units []unit, b *Block, idx int, x0, avail, y0 int32) in
 	var curUnits []drawUnit
 	lineH := int32(0)
 	firstIdx := -1
+	isWrap := false
 	flush := func() {
 		if len(curUnits) == 0 {
 			return
 		}
-		vl := VisualLine{block: idx, y: y, height: lineH, units: curUnits}
+		vl := VisualLine{block: idx, y: y, height: lineH, units: curUnits, wrap: isWrap}
 		if firstIdx < 0 {
 			firstIdx = len(d.lines)
 			vl.marker = b.marker
@@ -828,14 +834,16 @@ func (d *Doc) wrapUnits(units []unit, b *Block, idx int, x0, avail, y0 int32) in
 		curX = x0
 		curUnits = nil
 		lineH = 0
+		isWrap = false
 	}
 	for _, u := range units {
 		if u.text == "\n" {
-			flush()
+			flush() // 源码里的换行：新行（不是折行续行）
 			continue
 		}
 		w := measureItem(u.item, u.text)
 		if curX+w > x0+avail && curX > x0 {
+			isWrap = true
 			flush()
 		}
 		if n := len(curUnits); n > 0 && sameItem(curUnits[n-1].item, u.item) {
@@ -1007,6 +1015,15 @@ func (d *Doc) paint(hdc HDC, scroll, width, height int32) {
 	}
 
 	setBkMode(hdc, TRANSPARENT)
+
+	// 文本选择高亮（画在文字下方，保证文字可见）
+	if rects := d.selectionRects(scroll); len(rects) > 0 {
+		sb := createSolidBrush(colSel)
+		for _, r := range rects {
+			fillRect(hdc, &r, sb)
+		}
+		deleteObject(HGDIOBJ(sb))
+	}
 
 	// text
 	for _, vl := range d.lines {

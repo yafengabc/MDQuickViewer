@@ -137,6 +137,11 @@ var (
 	procSHBrowseForFolderW   = shell32.NewProc("SHBrowseForFolderW")
 	procSHGetPathFromIDListW = shell32.NewProc("SHGetPathFromIDListW")
 
+	procOpenClipboard    = user32.NewProc("OpenClipboard")
+	procCloseClipboard   = user32.NewProc("CloseClipboard")
+	procEmptyClipboard   = user32.NewProc("EmptyClipboard")
+	procSetClipboardData = user32.NewProc("SetClipboardData")
+
 	procDragAcceptFiles = shell32.NewProc("DragAcceptFiles")
 	procDragQueryFileW  = shell32.NewProc("DragQueryFileW")
 	procDragFinish      = shell32.NewProc("DragFinish")
@@ -1666,6 +1671,57 @@ func dragQueryFileName(hdrop uintptr, i int) string {
 
 func dragFinish(hdrop uintptr) {
 	callX(procDragFinish, 1, hdrop)
+}
+
+// ---------------------------------------------------------------- clipboard
+const CF_UNICODETEXT = 13
+
+// setClipboardText 把文本以 CF_UNICODETEXT 放入剪贴板。
+// 交给剪贴板的内存由系统接管，成功后不能再释放。
+func setClipboardText(s string) bool {
+	data, _ := windows.UTF16FromString(s)
+	h := globalAlloc(0x0002 /*GMEM_MOVEABLE*/, uintptr(len(data)*2))
+	if h == 0 {
+		return false
+	}
+	p := globalLock(h)
+	if p == 0 {
+		globalFree(h)
+		return false
+	}
+	dst := unsafe.Slice((*uint16)(unsafe.Pointer(p)), len(data))
+	copy(dst, data)
+	globalUnlock(h)
+
+	if r, _, _ := callX(procOpenClipboard, 1, 0, 0, 0); r == 0 {
+		globalFree(h)
+		return false
+	}
+	callX(procEmptyClipboard, 0)
+	callX(procSetClipboardData, 2, CF_UNICODETEXT, h, 0)
+	callX(procCloseClipboard, 0)
+	return true
+}
+
+// globalAlloc / GlobalLock / GlobalUnlock / GlobalFree
+func globalAlloc(flags uint32, bytes uintptr) uintptr {
+	r, _, _ := callX(procGlobalAlloc, 2, uintptr(flags), bytes, 0)
+	return r
+}
+
+func globalLock(h uintptr) uintptr {
+	r, _, _ := callX(procGlobalLock, 1, h, 0, 0)
+	return r
+}
+
+func globalUnlock(h uintptr) bool {
+	r, _, _ := callX(procGlobalUnlock, 1, h, 0, 0)
+	return r != 0
+}
+
+func globalFree(h uintptr) uintptr {
+	r, _, _ := callX(procGlobalFree, 1, h, 0, 0)
+	return r
 }
 
 // loadImageIcon 从可执行文件资源加载图标（id 为资源 ID，即 MAKEINTRESOURCE）。
