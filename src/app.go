@@ -111,13 +111,15 @@ func main() {
 	showWindow(app.mainWnd, SW_SHOW)
 	updateWindow(app.mainWnd)
 
-	// open default sample if present alongside exe
-	if exe, err := os.Executable(); err == nil {
-		dir := filepath.Dir(exe)
-		sample := filepath.Join(dir, "sample.md")
-		if _, err := os.Stat(sample); err == nil {
-			populateList(dir)
-			loadFile(sample)
+	// 命令行参数：gomd.exe <file.md> 或 <文件夹>；没有参数时回退到 exe 旁的 sample.md
+	if !openFromArgs(os.Args[1:]) {
+		if exe, err := os.Executable(); err == nil {
+			dir := filepath.Dir(exe)
+			sample := filepath.Join(dir, "sample.md")
+			if _, err := os.Stat(sample); err == nil {
+				populateList(dir)
+				loadFile(sample)
+			}
 		}
 	}
 
@@ -126,6 +128,48 @@ func main() {
 		translateMessage(&msg)
 		dispatchMessage(&msg)
 	}
+}
+
+// isMarkdown 判断文件名是否是 Markdown。
+func isMarkdown(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+// openFromArgs 处理命令行参数：
+//   - 给出一个 .md/.markdown 文件路径 → 直接打开该文件
+//   - 给出一个文件夹 → 只列出其中的 Markdown 文件
+//   - 参数不存在/格式不对 → 返回 false（由调用方回退到默认示例）
+//
+// 这样在资源管理器里把 .md 拖到 gomd.exe 上、或用 "打开方式" 指定 gomd 也能直接打开。
+func openFromArgs(args []string) bool {
+	for _, a := range args {
+		if a == "" {
+			continue
+		}
+		path, err := filepath.Abs(a)
+		if err != nil {
+			continue
+		}
+		st, err := os.Stat(path)
+		if err != nil {
+			// 明确给了参数却找不到：提示一下，避免"点了没反应"
+			messageBox(app.mainWnd, "找不到文件或文件夹:\n"+path, "gomd", MB_ICONERROR)
+			return true
+		}
+		if st.IsDir() {
+			rememberFolder(path)
+			populateList(path)
+			return true
+		}
+		if isMarkdown(path) {
+			rememberFolder(filepath.Dir(path))
+			populateList(filepath.Dir(path))
+			loadFile(path)
+			return true
+		}
+	}
+	return false
 }
 
 func wndProcMain(hwnd, msg, wParam, lParam uintptr) uintptr {

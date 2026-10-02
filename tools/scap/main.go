@@ -302,6 +302,29 @@ func makeHDrop(files ...string) uintptr {
 func main() {
 	exe := `D:\Projects\gomd\dist\gomd.exe`
 	outDir := `D:\Projects\gomd\dist`
+
+	// GOMD_SCAP_ATTACH=1：不启动新进程，只读取已运行实例的标题并截图（验证命令行参数等场景）
+	if os.Getenv("GOMD_SCAP_ATTACH") != "" {
+		main := findWindow("GomdMainWindow")
+		if main == 0 {
+			fmt.Println("找不到已运行的 gomd 窗口")
+			return
+		}
+		raise(main)
+		time.Sleep(800 * time.Millisecond)
+		var buf [256]uint16
+		pGetWindowTextW.Call(uintptr(main), uintptr(unsafe.Pointer(&buf[0])), 256)
+		fmt.Println("窗口标题 =", windows.UTF16ToString(buf[:]))
+		if r, err := getWindowRect(main); err == nil {
+			p := filepath.Join(outDir, "shot_attach.png")
+			if err := capture(r.Left, r.Top, r.Right-r.Left, r.Bottom-r.Top, p); err != nil {
+				fmt.Println("抓图失败:", err)
+			} else {
+				fmt.Println("已保存", p)
+			}
+		}
+		return
+	}
 	cmd := exec.Command(exe)
 	cmd.Dir = outDir
 	if err := cmd.Start(); err != nil {

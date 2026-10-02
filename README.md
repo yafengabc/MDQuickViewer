@@ -6,10 +6,22 @@
 
 ![主界面](docs/images/screenshot-main.png)
 
+## 使用
+
+```bash
+dist/gomd.exe                 # 不带参数：自动加载 exe 旁的 sample.md
+dist/gomd.exe README.md       # 打开指定的 Markdown 文件
+dist/gomd.exe docs            # 只列出该文件夹下的 Markdown 文件
+```
+
+在资源管理器里把 `.md` 文件**拖到 gomd.exe 图标上**，或用“打开方式”指定 gomd，
+都会通过命令行参数直接打开该文件（参数路径不存在时会弹窗提示）。
+
 ## 功能
 
 - **GFM 渲染**：标题、列表、任务列表、引用、代码块、行内样式、表格（列对齐 / 跨行单元格）、链接
 - **文件拖放**：把 `.md` 文件拖进窗口即可打开
+- **命令行参数**：`gomd.exe 文件.md` / `gomd.exe 文件夹`，支持"拖到 exe 上打开"和"打开方式"关联
 - **文本选择与复制**：鼠标拖选（跨行、跨段落），`Ctrl+C` 复制、`Ctrl+A` 全选（"编辑"菜单亦有入口）；折行处不会产生多余换行
 - **文件列表**：左侧列出当前文件夹的 Markdown 文件（默认折叠，`Ctrl+L` 或工具栏按钮展开）
 - **记住上次目录**：打开对话框自动定位到上次使用的目录（存于注册表 `HKCU\Software\gomd`）
