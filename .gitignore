@@ -11,3 +11,4 @@ out.log
 # 编辑器
 .idea/
 .vscode/
+.workbuddy/
