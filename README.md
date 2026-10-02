@@ -41,7 +41,8 @@
 依赖：Go 1.21+（Windows）；可选 windres（MSYS2/MinGW 自带，用于图标与 manifest）。
 
 ```bash
-./build.sh
+./build.sh          # Git Bash / MSYS2
+build.bat           # Windows 双击运行
 ```
 
 或手动执行：
@@ -57,6 +58,10 @@ go build -trimpath -ldflags="-s -w -H windowsgui" -o dist/gomd.exe ./src
 > 关于 `-mwindows`：那是 MinGW/gcc 的链接参数，作用是把 PE 子系统设为 GUI
 > （启动时无控制台黑窗口）。Go 的等价参数是 `-ldflags="-H windowsgui"`，
 > 两者效果一致，本项目使用后者。
+
+> **不要用 `go run ./src` 或裸 `go build ./src` 运行**：不带 `-H windowsgui`
+> 时 Go 默认生成 CUI 子系统（PE Subsystem=3），启动会带一个控制台黑框。
+> 用 `./build.sh` / `build.bat` 产出的是 GUI 子系统（Subsystem=2），无黑框。
 
 产物在 `dist/gomd.exe`（约 1.5 MB，可再经 UPX 压缩）。
 
