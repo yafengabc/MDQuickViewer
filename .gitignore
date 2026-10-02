@@ -1,0 +1,13 @@
+# 构建产物
+/dist/
+*.exe
+*.syso
+*.bmp
+out.log
+
+# 本地截图（开发辅助工具 scap 的临时输出）
+/shot_*.png
+
+# 编辑器
+.idea/
+.vscode/
