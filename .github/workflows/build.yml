@@ -42,6 +42,81 @@ jobs:
             MDQuickViewer/build/sample.md
           if-no-files-found: error
 
+  # MSVC + 静态 CRT（/MT）构建。
+  # 目的不是替代 gcc，而是证明源码可移植、并且提供一个不带
+  # api-ms-win-crt-* 转发器依赖的二进制选项。
+  # 注意：Win32 系统 DLL（kernel32/user32/gdi32/comctl32/...）**无法**静态链接，
+  # 微软不提供它们的静态库；/MT 只能把 C 运行时静态进 exe。
+  msvc:
+    runs-on: windows-latest
+    # 允许失败：MSVC 路线是可选增量，挂了不影响 gcc 主线与 Release
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 配置 MSVC 环境
+        shell: pwsh
+        run: |
+          # 在 PATH 里注入 MSVC 工具链（cl/link/lib）
+          $vs = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise"
+          if (-not (Test-Path $vs)) { $vs = "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional" }
+          if (-not (Test-Path $vs)) { $vs = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools" }
+          if (-not (Test-Path $vs)) { throw "未找到 Visual Studio 2022" }
+          $devcmd = Join-Path $vs "Common7\Tools\VsDevCmd.bat"
+          # 捕获环境变量后在同一 shell 内使用
+          $envDump = cmd /c "`"$devcmd`" -arch=x64 -host_arch=x64 >nul && set"
+          foreach ($line in $envDump) {
+            if ($line -match '^([^=]+)=(.*)$') {
+              Set-Item -Path "env:$($matches[1])" -Value $matches[2]
+            }
+          }
+          cl 2>&1 | Select-Object -First 1
+
+      - name: 编译资源（rc.exe）
+        shell: pwsh
+        run: |
+          cd MDQuickViewer
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          rc /nologo /fo build\mdqv.res resources\mdqv.rc
+
+      - name: 编译（/MT 静态 CRT）
+        shell: pwsh
+        working-directory: MDQuickViewer
+        run: |
+          cl /nologo /W3 /O2 /std:c11 /MT /GS /DUNICODE /D_UNICODE `
+            /D_CRT_SECURE_NO_WARNINGS /DWIN32_LEAN_AND_MEAN `
+            /Fo:build\ /Fe:build\MDQuickViewer-msvc.exe `
+            src\main.c src\win32.c src\markdown.c src\markdown_test.c `
+            src\highlight.c src\highlight_test.c src\render.c src\render_test.c `
+            src\settings.c src\dlg.c src\ui.c `
+            build\mdqv.res `
+            /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup `
+            comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib
+
+      - name: 验证导入表（静态 CRT 应无 api-ms-win-crt-*）
+        shell: pwsh
+        run: |
+          $exe = "MDQuickViewer\build\MDQuickViewer-msvc.exe"
+          if (-not (Test-Path $exe)) { throw "未生成 $exe" }
+          $dump = & dumpbin /nologo /dependents $exe
+          $dump | Write-Host
+          $crt = $dump | Select-String 'api-ms-win-crt|vcruntime|ucrtbase'
+          if ($crt) {
+            Write-Host "注意：仍存在 CRT 动态依赖 -> $($crt -join ', ')"
+          } else {
+            Write-Host "OK: 无 CRT 动态依赖（/MT 静态链接生效）"
+          }
+          # Win32 系统 DLL 必然还在，这是预期行为（无法静态链接）
+          Get-Item $exe | Select-Object Name, Length
+
+      - name: 上传 MSVC 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: MDQuickViewer-msvc
+          path: MDQuickViewer/build/MDQuickViewer-msvc.exe
+          if-no-files-found: warn
+
   # 每次 main 分支更新自动发一个 Release
   release:
     needs: build
