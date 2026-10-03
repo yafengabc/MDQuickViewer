@@ -5,6 +5,10 @@ GUI 框架。解析、语法着色与 GDI 自绘排版全部手写。
 
 ## 构建
 
+源码是**纯 C11**（无 GCC 扩展），支持两套工具链。
+
+### MinGW-w64 UCRT64（默认）
+
 需要 MSYS2 UCRT64 工具链（`gcc`、`windres`）。在本目录下：
 
 ```bash
@@ -17,6 +21,22 @@ GUI 框架。解析、语法着色与 GDI 自绘排版全部手写。
 - `-mwindows`：把 PE 子系统设为 GUI（启动无控制台黑框）
 - `-municode`：入口用 `wWinMain` 直接拿宽字符命令行，省去手工转 argv
 - `windres`：把图标与 manifest 编成 `.res.o` 链进 exe（`mingw-w64-ucrt-x86_64-binutils` 自带）
+
+### MSVC（可选，静态 CRT）
+
+CI 里另有一个 MSVC 构建，产出**零 CRT 动态依赖**的版本（`/MT`）：
+
+```powershell
+rc /nologo /fo build\mdqv.res resources\mdqv.rc
+cl /nologo /W3 /O2 /std:c11 /MT /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN `
+  /Fo:build\ /Fe:build\MDQuickViewer.exe `
+  src\*.c build\mdqv.res `
+  /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup `
+  comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib advapi32.lib
+```
+
+注意链接列表末尾的 `advapi32.lib`：`src/settings.c` 用注册表 API，漏了会报 `LNK2019`。
+gcc 侧靠符号解析侥幸能链上，**换工具链才是照妖镜**。
 
 ## 运行
 

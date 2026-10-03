@@ -102,12 +102,29 @@ cd MDQuickViewer && ./build.sh test
 `split_list_preview`，对负宽、零、极小、巨大、随机等上百万人次输入断言列表 / 预览宽度
 恒为非负且和不超过客户区宽度。
 
+## 下载
+
+GitHub Release 同时提供两个编译版本，**功能完全相同**，按需选择：
+
+| 版本 | 导入表 | 工具链 |
+| --- | --- | --- |
+| `MDQuickViewer-mingw64-x64.zip` | 17 个 DLL | MinGW-w64 UCRT64（gcc）。**与仓库里 `./build.sh` 的产物完全一致**，适合绝大多数用户 |
+| `MDQuickViewer-msvc-x64.zip` | 8 个 DLL，**0 个 CRT 依赖** | MSVC `/MT`，CRT 已静态链入。**导入表最干净**，适合对运行时依赖敏感的场景 |
+
+两者唯一区别是 C 运行时的链接方式。源码是纯 C11（无 GCC 扩展），两边都能编译。
+
 ## 部署
 
-`MDQuickViewer.exe` 的导入表只有 Windows 系统 DLL（kernel32 / user32 / gdi32 / comctl32 /
-comdlg32 / shell32 / ole32 / advapi32）与 UCRT 的 `api-ms-win-crt-*` 转发器——它们在
-Win10/11 上都是操作系统自带组件。**部署只需复制 exe 本身（旁边带上 sample.md），
-不需要附带任何 DLL。**
+两个版本的导入表都只包含 Windows 自带组件，**部署只需复制 exe 本身（旁边带上
+sample.md），不需要附带任何 DLL**。
+
+- **mingw64 版**：8 个 Win32 系统 DLL（kernel32 / user32 / gdi32 / comctl32 / comdlg32 /
+  shell32 / ole32 / advapi32）+ 9 个 UCRT 的 `api-ms-win-crt-*` 转发器。
+- **msvc 版**：同样 8 个 Win32 系统 DLL，`/MT` 已把 CRT 静态链入，一个 CRT 依赖都没有。
+
+Win32 系统 DLL **无法**静态链接——微软不提供它们的静态库，这是操作系统接口的本质。
+`api-ms-win-crt-private-l1-1-0.dll` 在 MinGW/UCRT64 工具链下也静态链不掉，同样不用管：
+它在 Win10/11 上是自带组件。
 
 ## 配置
 
