@@ -139,14 +139,25 @@ jobs:
       contents: write
 
     steps:
+      # 版本号要从远端已有的 v0.N 推导，所以这里需要仓库上下文。
+      # 之前这个 job 直接从「下载产物」开始（不需要代码），加了
+      # `git ls-remote origin` 后才发现非 git 目录下会 fatal。
+      - uses: actions/checkout@v4
+        with:
+          # 拉完整历史与全部 tag，方便本地/日志里核对版本号推导
+          fetch-depth: 0
+
       - name: 计算下一个版本号
         id: ver
         shell: pwsh
         run: |
           # 版本号策略：两段式 v0.N，每次 main 推送自动 +1。
           # 只匹配 ^v\d+\.\d+$ 的 tag —— 早期用过的 v<完整SHA> 滚动 tag
-          # 不符合该正则，会被自然忽略（已清理掉）。
+          # 不符合该正则，会被自然忽略（那批已清理掉）。
           $remote = git ls-remote --tags --refs origin
+          if ($LASTEXITCODE -ne 0) {
+            throw "git ls-remote 失败（exit=$LASTEXITCODE），无法读取远端 tag"
+          }
           $tags = @($remote |
             ForEach-Object { ($_ -split '\s+')[1] -replace '^refs/tags/', '' } |
             Where-Object { $_ -match '^v\d+\.\d+$' })
