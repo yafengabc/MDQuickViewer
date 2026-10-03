@@ -104,7 +104,9 @@ cd MDQuickViewer && ./build.sh test
 
 ## 下载
 
-GitHub Release 同时提供两个编译版本，**功能完全相同**，按需选择：
+从 [Releases](https://github.com/yafengabc/MDQuickViewer/releases) 取最新的版本 tag
+（`v0.1`、`v0.2`……每次向 `main` 推送自动递增），每次发布同时提供两个编译版本，
+**功能完全相同**，按需选择：
 
 | 版本 | 导入表 | 工具链 |
 | --- | --- | --- |
