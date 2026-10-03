@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"unicode/utf16"
@@ -121,7 +122,9 @@ func dlgPopulate() {
 		if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".markdown") {
 			continue
 		}
-		sendMessage(dlgList, LB_ADDSTRING, 0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(name))))
+		p := windows.StringToUTF16Ptr(name)
+		sendMessage(dlgList, LB_ADDSTRING, 0, uintptr(unsafe.Pointer(p)))
+		runtime.KeepAlive(p)
 	}
 }
 
@@ -140,6 +143,7 @@ func dlgOpenSelected() {
 	}
 	buf := make([]uint16, n+1)
 	sendMessage(dlgList, LB_GETTEXT, uintptr(cur), uintptr(unsafe.Pointer(&buf[0])))
+	runtime.KeepAlive(buf)
 	name := windows.UTF16ToString(buf)
 	path := filepath.Join(dlgFolder, name)
 	rememberFolder(dlgFolder)

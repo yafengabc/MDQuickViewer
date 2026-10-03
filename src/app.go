@@ -110,7 +110,6 @@ func main() {
 
 	showWindow(app.mainWnd, SW_SHOW)
 	updateWindow(app.mainWnd)
-
 	// 命令行参数：gomd.exe <file.md> 或 <文件夹>；没有参数时回退到 exe 旁的 sample.md
 	if !openFromArgs(os.Args[1:]) {
 		if exe, err := os.Executable(); err == nil {
@@ -173,6 +172,7 @@ func openFromArgs(args []string) bool {
 }
 
 func wndProcMain(hwnd, msg, wParam, lParam uintptr) uintptr {
+	defer guardPanic("wndProcMain")
 	switch msg {
 	case WM_CREATE:
 		app.mainWnd = windows.HWND(hwnd)
@@ -187,6 +187,9 @@ func wndProcMain(hwnd, msg, wParam, lParam uintptr) uintptr {
 		return 0
 	case WM_SIZE:
 		layoutChildren()
+		return 0
+	case WM_GETMINMAXINFO:
+		onGetMinMaxInfo(lParam)
 		return 0
 	case WM_COMMAND:
 		id := wParam & 0xffff
@@ -207,6 +210,7 @@ func wndProcMain(hwnd, msg, wParam, lParam uintptr) uintptr {
 }
 
 func wndProcPreview(hwnd, msg, wParam, lParam uintptr) uintptr {
+	defer guardPanic("wndProcPreview")
 	switch msg {
 	case WM_ERASEBKGND:
 		return 1
@@ -386,5 +390,23 @@ func onKeyDown(wParam uintptr) {
 		if app.doc != nil {
 			loadFile(app.doc.path)
 		}
+	}
+}
+
+// onGetMinMaxInfo 设定窗口最小尺寸。
+//
+// 除了避免把窗口拖到"列表和预览都放不下"的退化尺寸（cw < minPreviewW 时
+// 旧的 listW=cw-100 逻辑会算出负宽度，MoveWindow 负宽度调整 comctl32
+// ListView 会触发 0xC0000005），也给用户一个明确的可用下限。
+func onGetMinMaxInfo(lParam uintptr) {
+	if lParam == 0 {
+		return
+	}
+	m := (*MINMAXINFO)(unsafe.Pointer(lParam))
+	if m.PtMinTrackSize.X < minPreviewW+40 {
+		m.PtMinTrackSize.X = minPreviewW + 40
+	}
+	if m.PtMinTrackSize.Y < 120 {
+		m.PtMinTrackSize.Y = 120
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"unicode/utf16"
 	"unsafe"
@@ -58,6 +59,7 @@ func createControls() {
 	// 因此手动构造。
 	sp := toolbarStringPool("打开文件", "打开文件夹", "文件列表", "放大", "缩小", "重置", "关于")
 	first := int32(sendMessage(tb, TB_ADDSTRINGW, 0, uintptr(unsafe.Pointer(sp))))
+	runtime.KeepAlive(sp)
 	buttons := []TBBUTTON{
 		{IBitmap: 0, IdCommand: IDM_OPENFILE, FsState: TBSTATE_ENABLED, FsStyle: BTNS_BUTTON | BTNS_AUTOSIZE, IString: first + 0},
 		{IBitmap: 1, IdCommand: IDM_OPENFOLDER, FsState: TBSTATE_ENABLED, FsStyle: BTNS_BUTTON | BTNS_AUTOSIZE, IString: first + 1},
@@ -71,6 +73,7 @@ func createControls() {
 		{IBitmap: 6, IdCommand: IDM_ABOUT, FsState: TBSTATE_ENABLED, FsStyle: BTNS_BUTTON | BTNS_AUTOSIZE, IString: first + 6},
 	}
 	sendMessage(tb, TB_ADDBUTTONSW, uintptr(len(buttons)), uintptr(unsafe.Pointer(&buttons[0])))
+	runtime.KeepAlive(buttons)
 	// 连接图像列表（手绘 16x16 图标）
 	if himl := createToolbarImageList(); himl != 0 {
 		sendMessage(tb, TB_SETIMAGELIST, 0, uintptr(himl))
@@ -82,6 +85,7 @@ func createControls() {
 	app.statusBar = sb
 	parts := []int32{-1}
 	sendMessage(sb, SB_SETPARTS, 1, uintptr(unsafe.Pointer(&parts[0])))
+	runtime.KeepAlive(parts)
 	setStatus("就绪")
 
 	// list view
@@ -114,6 +118,7 @@ func insertColumn(lv HWND, i int, text string, cx int32) {
 	col.PszText = windows.StringToUTF16Ptr(text)
 	col.ISubItem = int32(i)
 	sendMessage(lv, LVM_INSERTCOLUMNW, uintptr(i), uintptr(unsafe.Pointer(&col)))
+	runtime.KeepAlive(col.PszText)
 }
 
 func insertRow(lv HWND, idx int, name string) {
@@ -123,6 +128,7 @@ func insertRow(lv HWND, idx int, name string) {
 	it.PszText = windows.StringToUTF16Ptr(name)
 	it.LParam = uintptr(idx)
 	sendMessage(lv, LVM_INSERTITEMW, 0, uintptr(unsafe.Pointer(&it)))
+	runtime.KeepAlive(it.PszText)
 }
 
 // updateListColumnWidth 让唯一的"名称"列铺满列表宽度。
@@ -222,6 +228,7 @@ func highlightInList(path string) {
 			it.State = LVIS_SELECTED | LVIS_FOCUSED
 			it.StateMask = LVIS_SELECTED | LVIS_FOCUSED
 			sendMessage(app.listView, LVM_SETITEMSTATE, uintptr(i), uintptr(unsafe.Pointer(&it)))
+			runtime.KeepAlive(&it)
 			sendMessage(app.listView, LVM_ENSUREVISIBLE, uintptr(i), 0)
 			return
 		}
@@ -279,6 +286,11 @@ func updateScrollRange() {
 	var rc RECT
 	getClientRect(app.preview, &rc)
 	viewH := rc.Bottom - rc.Top
+	if viewH < 0 {
+		// 窗口被压得极矮时客户区可能算出负高度；直接按 0 处理，
+		// 否则 uint32(viewH) 会变成巨大的正数，滚动条范围彻底失真。
+		viewH = 0
+	}
 	total := app.doc.contentHeight
 	if viewH >= total {
 		app.scroll = 0
@@ -302,6 +314,9 @@ func clampScroll() {
 	var rc RECT
 	getClientRect(app.preview, &rc)
 	viewH := rc.Bottom - rc.Top
+	if viewH < 0 {
+		viewH = 0
+	}
 	total := app.doc.contentHeight
 	max := total - viewH
 	if max < 0 {
@@ -331,6 +346,9 @@ func handleVScroll(wParam uintptr) {
 	var rc RECT
 	getClientRect(app.preview, &rc)
 	viewH := rc.Bottom - rc.Top
+	if viewH < 0 {
+		viewH = 0
+	}
 	pos := app.scroll
 	switch code {
 	case SB_LINEUP:
@@ -357,7 +375,9 @@ func handleVScroll(wParam uintptr) {
 
 // ---------------------------------------------------------------- commands
 func setStatus(text string) {
-	sendMessage(app.statusBar, SB_SETTEXTW, 0, uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(text))))
+	p := windows.StringToUTF16Ptr(text)
+	sendMessage(app.statusBar, SB_SETTEXTW, 0, uintptr(unsafe.Pointer(p)))
+	runtime.KeepAlive(p)
 }
 
 func toggleList() {
@@ -442,11 +462,27 @@ func onListNotify(code int32) {
 	}
 }
 
+// minPreviewW 列表展开时，预览区至少保留的宽度；也是 cw 的下限参考。
+const minPreviewW = 100
+
+// layoutChildren 按主窗口客户区重新摆放工具栏/状态栏/列表/预览。
+//
+// 关键：所有传给 MoveWindow 的宽高都必须先夹到 >= 0。
+// 窗口可以被拖得比 minPreviewW 窄，此时 cw-100 会变成负数；旧代码写成
+// `if listW > cw-100 { listW = cw-100 }`，在列表折叠（listW=0）时
+// 0 > 负数 成立 → listW 被改成负数 → MoveWindow 以负宽度调整 comctl32
+// ListView → 控件内部按负尺寸算布局 → 访问违例 0xC0000005（拖动窗体大小必崩）。
 func layoutChildren() {
 	var rc RECT
 	getClientRect(app.mainWnd, &rc)
 	cw := rc.Right - rc.Left
 	ch := rc.Bottom - rc.Top
+	if cw < 0 {
+		cw = 0
+	}
+	if ch < 0 {
+		ch = 0
+	}
 
 	// toolbar height
 	var tbRect RECT
@@ -459,27 +495,70 @@ func layoutChildren() {
 	if sbh < 18 {
 		sbh = 22
 	}
+	if tbh < 0 {
+		tbh = 0
+	}
 
 	// toolbar
 	moveWindow(app.toolbar, 0, 0, cw, tbh, true)
-	// status bar
-	sendMessage(app.statusBar, SB_SETPARTS, 1, uintptr(unsafe.Pointer(&[]int32{int32(cw)}[0])))
-	moveWindow(app.statusBar, 0, ch-sbh, cw, sbh, true)
+
+	// status bar：分区宽度为 cw，再放到客户区底部（窗口太矮时 y 夹到 0）
+	parts := []int32{cw}
+	sendMessage(app.statusBar, SB_SETPARTS, 1, uintptr(unsafe.Pointer(&parts[0])))
+	runtime.KeepAlive(parts)
+	sbY := ch - sbh
+	if sbY < 0 {
+		sbY = 0
+	}
+	moveWindow(app.statusBar, 0, sbY, cw, sbh, true)
 
 	// list + preview
 	top := tbh
 	availH := ch - tbh - sbh
-	listW := app.panelW
-	if !app.showList {
-		listW = 0
+	if availH < 0 {
+		availH = 0
 	}
-	if listW > cw-100 {
-		listW = cw - 100
-	}
+
+	listW, prevW := splitListPreview(cw, app.panelW, app.showList)
+
 	moveWindow(app.listView, 0, top, listW, availH, true)
 	updateListColumnWidth(listW)
-	moveWindow(app.preview, listW, top, cw-listW, availH, true)
+	moveWindow(app.preview, listW, top, prevW, availH, true)
+
 	relayout()
+}
+
+// splitListPreview 把客户区宽度拆成"列表宽 + 预览宽"。
+//
+// 这是"拖动窗体大小必崩"的根因所在：窗口宽度可以小于 minPreviewW，
+// 此时旧的 `if listW > cw-100 { listW = cw-100 }` 会在列表折叠
+// （listW=0）时算出负宽度并交给 MoveWindow 调整 comctl32 ListView，
+// 控件内部按负尺寸排版 → 访问违例 0xC0000005。
+//
+// 因此这里返回的每个宽度都必须 >= 0，且两者之和不超过 cw。
+func splitListPreview(cw, panelW int32, showList bool) (listW, prevW int32) {
+	if cw < 0 {
+		cw = 0
+	}
+	listW = panelW
+	if !showList {
+		listW = 0
+	} else if max := cw - minPreviewW; max > 0 && listW > max {
+		// 列表展开时按可用宽度收敛，给预览区留出 minPreviewW。
+		// 注意 max <= 0 时保持 panelW 不变（窗口太窄，列表交由最小宽度约束处理）。
+		listW = max
+	}
+	if listW < 0 {
+		listW = 0
+	}
+	if listW > cw {
+		listW = cw
+	}
+	prevW = cw - listW
+	if prevW < 0 {
+		prevW = 0
+	}
+	return listW, prevW
 }
 
 // ---------------------------------------------------------------- toolbar icons

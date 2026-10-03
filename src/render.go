@@ -44,6 +44,25 @@ var (
 	codeFont    = "Consolas"
 )
 
+// 代码着色配色（参考 GitHub Light 主题的观感，浅底深字）
+var (
+	colCodeText    = COLORREF(0x1F2328) // 普通代码
+	colCodeKeyword = COLORREF(0xCF222E) // 关键字
+	colCodeType    = COLORREF(0x953800) // 类型/内建常量
+	colCodeString  = COLORREF(0x0A3069) // 字符串
+	colCodeComment = COLORREF(0x6E7781) // 注释
+	colCodeNumber  = COLORREF(0x0550AE) // 数字
+	colCodePreproc = COLORREF(0x116329) // 预处理/宏
+	colCodeFunc    = COLORREF(0x8250DF) // 函数名/变量
+
+	colCodeInline    = COLORREF(0xA40E26) // 行内代码文字
+	colCodeInlineBg  = COLORREF(0xF2F3F5) // 行内代码底色
+	colHeadAccent    = COLORREF(0x0B4F9E) // h1/h2 标题强调色
+	colTaskDone      = COLORREF(0x1A7F37) // 任务列表已完成
+	colTaskTodo      = COLORREF(0x8C8C8C) // 任务列表未完成
+	colTableHeadText = COLORREF(0x1F2328)
+)
+
 // ---------------------------------------------------------------- fonts
 type fontKey struct {
 	family       string
@@ -129,6 +148,7 @@ type runItem struct {
 	code      bool
 	strike    bool
 	color     COLORREF
+	bg        COLORREF // 非 0 时在文字下方铺一层底色（行内代码块）
 	link      string
 	underline bool
 }
@@ -718,9 +738,25 @@ func spansToItems(b *Block) []runItem {
 		if b.kind == "h6" {
 			it.italic = true
 		}
+		// h1/h2 用强调色，层级一眼可辨
+		if b.kind == "h1" || b.kind == "h2" {
+			it.color = colHeadAccent
+		}
+		// 引用块：灰色斜体
+		if b.quote {
+			it.italic = true
+			if it.color == 0 {
+				it.color = colQuote
+			}
+		}
 		if s.Code {
+			// 行内代码：等宽字体 + 红棕字 + 浅灰底
 			it.family = codeFont
 			it.px = effPx(codePx)
+			it.code = true
+			it.bold = false
+			it.color = colCodeInline
+			it.bg = colCodeInlineBg
 		}
 		if s.Link != "" {
 			it.link = s.Link
@@ -754,7 +790,7 @@ func (d *Doc) doText(b *Block, idx int, width, y0 int32) int32 {
 func sameItem(a, b runItem) bool {
 	return a.family == b.family && a.px == b.px && a.bold == b.bold &&
 		a.italic == b.italic && a.code == b.code && a.strike == b.strike &&
-		a.color == b.color && a.link == b.link && a.underline == b.underline
+		a.color == b.color && a.bg == b.bg && a.link == b.link && a.underline == b.underline
 }
 
 func (d *Doc) doCode(b *Block, idx int, width, y0 int32) int32 {
@@ -764,9 +800,23 @@ func (d *Doc) doCode(b *Block, idx int, width, y0 int32) int32 {
 	}
 	x0 := LM + b.indent
 	y := y0
+	def := langDefFor(b.lang)
+	st := &hlState{}
 	for _, line := range b.lines {
 		line = strings.TrimRight(line, "\r\n")
-		toks := codeTokens(line)
+		// 按语言做词法着色；def==nil 时退化为单色
+		type seg struct {
+			text  string
+			color COLORREF
+		}
+		var segs []seg
+		if def == nil {
+			segs = append(segs, seg{line, colCodeText})
+		} else {
+			for _, tk := range highlightTokens(line, def, st) {
+				segs = append(segs, seg{tk.text, codeColor(tk.class)})
+			}
+		}
 		var curUnits []drawUnit
 		curX := x0
 		lineH := int32(effPx(codePx) * 3 / 2)
@@ -786,17 +836,17 @@ func (d *Doc) doCode(b *Block, idx int, width, y0 int32) int32 {
 			curUnits = nil
 			isWrap = false
 		}
-		for _, tk := range toks {
-			it := runItem{text: tk, family: codeFont, px: codePx, code: true, color: colCode}
-			w := measureItem(it, tk)
+		for _, sg := range segs {
+			it := runItem{text: sg.text, family: codeFont, px: codePx, code: true, color: sg.color}
+			w := measureItem(it, sg.text)
 			if curX+w > x0+avail && curX > x0 {
 				isWrap = true
 				flush()
 			}
 			if n := len(curUnits); n > 0 && sameItem(curUnits[n-1].item, it) {
-				curUnits[n-1].text += tk
+				curUnits[n-1].text += sg.text
 			} else {
-				curUnits = append(curUnits, drawUnit{x: curX, item: it, text: tk})
+				curUnits = append(curUnits, drawUnit{x: curX, item: it, text: sg.text})
 			}
 			curX += w
 		}
@@ -973,6 +1023,11 @@ func measureItem(it runItem, text string) int32 {
 
 // ---------------------------------------------------------------- painting
 func (d *Doc) paint(hdc HDC, scroll, width, height int32) {
+	// 窗口被压得极窄/极矮时客户区可能算出 0 或负值；
+	// 用负尺寸构造 RECT 会让 FillRect/BitBlt 越界，直接跳过绘制。
+	if width <= 0 || height <= 0 {
+		return
+	}
 	// background
 	rc := RECT{0, 0, width, height}
 	brush := createSolidBrush(COLORREF(0xFFFFFF))
@@ -1034,11 +1089,28 @@ func (d *Doc) paint(hdc HDC, scroll, width, height int32) {
 		if vl.marker != "" {
 			f := getFont(uiFont, bodyPx, true, false)
 			old := selectObject(hdc, HGDIOBJ(f))
-			setTextColor(hdc, colHead)
+			mcol := colHead
+			switch vl.marker {
+			case "☑":
+				mcol = colTaskDone
+			case "☐":
+				mcol = colTaskTodo
+			case "◦", "▪":
+				mcol = colLink
+			}
+			setTextColor(hdc, mcol)
 			textOut(hdc, vl.markerX, yTop, vl.marker)
 			selectObject(hdc, old)
 		}
 		for _, du := range vl.units {
+			// 行内代码的浅灰底（略向外扩 2px，形成胶囊感）
+			if du.item.bg != 0 {
+				w := measureItem(du.item, du.text)
+				br := RECT{du.x - 2, yTop + 1, du.x + w + 2, yTop + vl.height - 1}
+				sb := createSolidBrush(du.item.bg)
+				fillRect(hdc, &br, sb)
+				deleteObject(HGDIOBJ(sb))
+			}
 			f := getFont(du.item.family, du.item.px, du.item.bold, du.item.italic)
 			old := selectObject(hdc, HGDIOBJ(f))
 			col := du.item.color

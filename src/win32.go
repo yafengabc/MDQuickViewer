@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -675,6 +676,7 @@ func getModuleHandle() HINSTANCE {
 
 func registerClassEx(wc *WNDCLASSEX) (ATOM, error) {
 	r, _, err := callX(procRegisterClassExW, 1, uintptr(unsafe.Pointer(wc)), 0, 0)
+	runtime.KeepAlive(wc)
 	if r == 0 {
 		return 0, err
 	}
@@ -691,6 +693,8 @@ func createWindowEx(exStyle uint32, className *uint16, windowName *uint16, style
 		uintptr(style),
 		uintptr(x), uintptr(y), uintptr(width), uintptr(height),
 		uintptr(parent), uintptr(menu), uintptr(inst), uintptr(param))
+	runtime.KeepAlive(className)
+	runtime.KeepAlive(windowName)
 	return windows.HWND(r)
 }
 
@@ -714,15 +718,18 @@ func getMessage(msg *MSG, hwnd windows.HWND, msgFilterMin, msgFilterMax uint32) 
 	r, _, _ := callX(procGetMessageW, 4,
 		uintptr(unsafe.Pointer(msg)), uintptr(hwnd),
 		uintptr(msgFilterMin), uintptr(msgFilterMax), 0, 0)
+	runtime.KeepAlive(msg)
 	return int(int32(r))
 }
 
 func translateMessage(msg *MSG) {
 	callX(procTranslateMessage, 1, uintptr(unsafe.Pointer(msg)), 0, 0)
+	runtime.KeepAlive(msg)
 }
 
 func dispatchMessage(msg *MSG) {
 	callX(procDispatchMessageW, 1, uintptr(unsafe.Pointer(msg)), 0, 0)
+	runtime.KeepAlive(msg)
 }
 
 func postQuitMessage(exitCode int32) {
@@ -749,6 +756,7 @@ func destroyWindow(hwnd windows.HWND) bool {
 func setWindowText(hwnd windows.HWND, text string) bool {
 	p, _ := windows.UTF16PtrFromString(text)
 	r, _, _ := callX(procSetWindowTextW, 2, uintptr(hwnd), uintptr(unsafe.Pointer(p)), 0)
+	runtime.KeepAlive(p)
 	return r != 0
 }
 
@@ -765,12 +773,14 @@ func getWindowText(hwnd windows.HWND) string {
 	buf := make([]uint16, n+1)
 	r, _, _ := callX(procGetWindowTextW, 3, uintptr(hwnd),
 		uintptr(unsafe.Pointer(&buf[0])), uintptr(n+1))
+	runtime.KeepAlive(buf)
 	return windows.UTF16ToString(buf[:r])
 }
 
 func getClientRect(hwnd windows.HWND, rc *RECT) bool {
 	r, _, _ := callX(procGetClientRect, 2, uintptr(hwnd),
 		uintptr(unsafe.Pointer(rc)), 0)
+	runtime.KeepAlive(rc)
 	return r != 0
 }
 
@@ -778,13 +788,24 @@ func getWindowRect(hwnd windows.HWND) (RECT, error) {
 	var rc RECT
 	r, _, err := callX(procGetWindowRect, 2, uintptr(hwnd),
 		uintptr(unsafe.Pointer(&rc)), 0)
+	runtime.KeepAlive(&rc)
 	if r == 0 {
 		return rc, err
 	}
 	return rc, nil
 }
 
+// moveWindow 调整窗口位置与大小。
+//
+// 防御性夹取：负的宽高会让 comctl32 控件（ListView/Toolbar/StatusBar）
+// 在内部按负尺寸计算布局，可能触发访问违例，因此这里统一夹到 >= 0。
 func moveWindow(hwnd windows.HWND, x, y, w, h int32, repaint bool) bool {
+	if w < 0 {
+		w = 0
+	}
+	if h < 0 {
+		h = 0
+	}
 	b := 0
 	if repaint {
 		b = 1
@@ -826,11 +847,13 @@ func releaseDC(hwnd windows.HWND, hdc HDC) int {
 func beginPaint(hwnd windows.HWND, ps *PAINTSTRUCT) HDC {
 	r, _, _ := callX(procBeginPaint, 2, uintptr(hwnd),
 		uintptr(unsafe.Pointer(ps)), 0)
+	runtime.KeepAlive(ps)
 	return HDC(r)
 }
 
 func endPaint(hwnd windows.HWND, ps *PAINTSTRUCT) {
 	callX(procEndPaint, 2, uintptr(hwnd), uintptr(unsafe.Pointer(ps)), 0)
+	runtime.KeepAlive(ps)
 }
 
 func getSysColor(idx int32) COLORREF {
@@ -845,6 +868,7 @@ func invalidateRect(hwnd windows.HWND, rect *RECT, erase bool) bool {
 	}
 	r, _, _ := callX(procInvalidateRect, 3, uintptr(hwnd),
 		uintptr(unsafe.Pointer(rect)), uintptr(b))
+	runtime.KeepAlive(rect)
 	return r != 0
 }
 
@@ -872,24 +896,28 @@ func getKeyState(vk int32) int16 {
 func setScrollInfo(hwnd windows.HWND, bar int32, si *SCROLLINFO) bool {
 	r, _, _ := callX(procSetScrollInfo, 4, uintptr(hwnd),
 		uintptr(bar), uintptr(unsafe.Pointer(si)), 0, 0, 0)
+	runtime.KeepAlive(si)
 	return r != 0
 }
 
 func getScrollInfo(hwnd windows.HWND, bar int32, si *SCROLLINFO) bool {
 	r, _, _ := callX(procGetScrollInfo, 4, uintptr(hwnd),
 		uintptr(bar), uintptr(unsafe.Pointer(si)), 0, 0, 0)
+	runtime.KeepAlive(si)
 	return r != 0
 }
 
 func screenToClient(hwnd windows.HWND, pt *POINT) bool {
 	r, _, _ := callX(procScreenToClient, 2, uintptr(hwnd),
 		uintptr(unsafe.Pointer(pt)), 0)
+	runtime.KeepAlive(pt)
 	return r != 0
 }
 
 func clientToScreen(hwnd windows.HWND, pt *POINT) bool {
 	r, _, _ := callX(procClientToScreen, 2, uintptr(hwnd),
 		uintptr(unsafe.Pointer(pt)), 0)
+	runtime.KeepAlive(pt)
 	return r != 0
 }
 
@@ -966,6 +994,7 @@ func messageBox(hwnd windows.HWND, text, caption string, flags uint32) int {
 // ---------------------------------------------------------------- gdi wrappers
 func createFontIndirect(lf *LOGFONT) HFONT {
 	r, _, _ := callX(procCreateFontIndirectW, 1, uintptr(unsafe.Pointer(lf)), 0, 0)
+	runtime.KeepAlive(lf)
 	return HFONT(r)
 }
 
@@ -998,6 +1027,8 @@ func createDIBSection(hdc HDC, hdr *BITMAPINFOHEADER, usage uint32, bitsOut *uin
 	r, _, _ := callX(procCreateDIBSection, 6, uintptr(hdc),
 		uintptr(unsafe.Pointer(hdr)), uintptr(usage),
 		uintptr(unsafe.Pointer(bitsOut)), section, uintptr(offset))
+	runtime.KeepAlive(hdr)
+	runtime.KeepAlive(bitsOut)
 	return HBITMAP(r)
 }
 
@@ -1067,13 +1098,20 @@ func deleteObject(obj HGDIOBJ) bool {
 }
 
 func getTextExtentPoint32(hdc HDC, text string) (int32, int32) {
-	pts, _ := windows.UTF16FromString(text)
+	pts, err := windows.UTF16FromString(text)
+	if err != nil || len(pts) == 0 {
+		return 0, 0 // 文本含内嵌 NUL 等非法内容时 UTF16FromString 返回 nil
+	}
 	var sz SIZE
 	// 注意：UTF16FromString 返回的切片带 1 个结尾 NUL；必须把长度减 1，
 	// 否则 GetTextExtentPoint32W 会把 NUL 字形的步进（雅黑约 7px）也算进宽度，
 	// 每个排版单元都虚增 ~7px，累加后表现为“字间距偏大”。
 	callX(procGetTextExtentPoint32W, 4, uintptr(hdc),
 		uintptr(unsafe.Pointer(&pts[0])), uintptr(len(pts)-1), uintptr(unsafe.Pointer(&sz)), 0, 0)
+	// callX 是普通 Go 函数（不是 syscall.Syscall），编译器不会替我们保住 pts，
+	// 必须在调用之后再保一次活，否则 GC 可能在调用期间回收它 → GDI 读悬垂内存。
+	runtime.KeepAlive(pts)
+	runtime.KeepAlive(&sz)
 	return sz.X, sz.Y
 }
 
@@ -1093,14 +1131,21 @@ func setBkColor(hdc HDC, color COLORREF) COLORREF {
 }
 
 func textOut(hdc HDC, x, y int32, text string) bool {
-	pts, _ := windows.UTF16FromString(text)
+	pts, err := windows.UTF16FromString(text)
+	if err != nil || len(pts) == 0 {
+		return false
+	}
 	r, _, _ := callX(procTextOutW, 4, uintptr(hdc), uintptr(x), uintptr(y),
 		uintptr(unsafe.Pointer(&pts[0])), uintptr(len(pts)-1), 0)
+	runtime.KeepAlive(pts)
 	return r != 0
 }
 
 func extTextOut(hdc HDC, x, y int32, options uint32, rect *RECT, text string, dx []int32) bool {
-	pts, _ := windows.UTF16FromString(text)
+	pts, err := windows.UTF16FromString(text)
+	if err != nil || len(pts) == 0 {
+		return false
+	}
 	var pdx uintptr
 	if len(dx) > 0 {
 		pdx = uintptr(unsafe.Pointer(&dx[0]))
@@ -1108,6 +1153,9 @@ func extTextOut(hdc HDC, x, y int32, options uint32, rect *RECT, text string, dx
 	r, _, _ := callX(procExtTextOutW, 7, uintptr(hdc), uintptr(x), uintptr(y),
 		uintptr(options), uintptr(unsafe.Pointer(rect)),
 		uintptr(unsafe.Pointer(&pts[0])), uintptr(len(pts)-1), pdx, 0)
+	runtime.KeepAlive(pts)
+	runtime.KeepAlive(dx)
+	runtime.KeepAlive(rect)
 	return r != 0
 }
 
@@ -1203,6 +1251,7 @@ type INITCOMMONCONTROLSEX struct {
 
 func initCommonControlsEx(icc *INITCOMMONCONTROLSEX) bool {
 	r, _, _ := callX(procInitCommonControlsEx, 1, uintptr(unsafe.Pointer(icc)), 0, 0)
+	runtime.KeepAlive(icc)
 	return r != 0
 }
 
@@ -1494,6 +1543,16 @@ type POINT struct {
 type SIZE struct {
 	X int32
 	Y int32
+}
+
+// MINMAXINFO 用于 WM_GETMINMAXINFO。注意 Windows 里没有 ptMinSize 字段，
+// 窗口的最小尺寸是通过 ptMinTrackSize 生效的。
+type MINMAXINFO struct {
+	PtReserved     POINT
+	PtMaxSize      POINT
+	PtMaxPosition  POINT
+	PtMinTrackSize POINT
+	PtMaxTrackSize POINT
 }
 
 type WNDCLASSEX struct {

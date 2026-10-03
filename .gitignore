@@ -12,3 +12,6 @@ out.log
 .idea/
 .vscode/
 .workbuddy/
+
+# 渲染自检生成的 PNG
+/src/*.png
