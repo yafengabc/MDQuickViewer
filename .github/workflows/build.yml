@@ -139,6 +139,31 @@ jobs:
       contents: write
 
     steps:
+      - name: 计算下一个版本号
+        id: ver
+        shell: pwsh
+        run: |
+          # 版本号策略：两段式 v0.N，每次 main 推送自动 +1。
+          # 只匹配 ^v\d+\.\d+$ 的 tag —— 早期用过的 v<完整SHA> 滚动 tag
+          # 不符合该正则，会被自然忽略（已清理掉）。
+          $remote = git ls-remote --tags --refs origin
+          $tags = @($remote |
+            ForEach-Object { ($_ -split '\s+')[1] -replace '^refs/tags/', '' } |
+            Where-Object { $_ -match '^v\d+\.\d+$' })
+          "已存在的版本 tag: $($tags -join ', ')" | Out-Host
+
+          # 取最大的次版本号；一个都没有时从 1 开始（即 v0.1）。
+          $max = -1
+          foreach ($t in $tags) {
+            $minor = [int]($t -replace '^v\d+\.', '')
+            if ($minor -gt $max) { $max = $minor }
+          }
+          $next = if ($max -lt 0) { 1 } else { $max + 1 }
+          $tag = "v0.$next"
+          "下一个版本号: $tag" | Out-Host
+          "tag=$tag"  | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "name=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       # 直接复用 build / msvc 两个 job 的产物，不重复构建
       - name: 下载 mingw64 产物
         uses: actions/download-artifact@v4
@@ -178,9 +203,13 @@ jobs:
 
       - name: 生成 Release 说明
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
         run: |
           # 导入表由各构建 job 用 dumpbin / objdump 落盘，这里只读文本文件，
           # 本 job 不需要任何编译工具链。
+          "本次发布的版本号: $env:RELEASE_TAG" | Out-Host
+          if (-not $env:RELEASE_TAG) { throw "RELEASE_TAG 为空，上一步的版本号计算没成功？" }
           $mgDlls = @(Get-Content dist-mingw64\deps-mingw64.txt | Where-Object { $_.Trim() })
           $msDlls = @(Get-Content dist-msvc\deps-msvc.txt       | Where-Object { $_.Trim() })
           if ($mgDlls.Count -eq 0) { throw "mingw64 导入表为空，deps-mingw64.txt 没生成？" }
@@ -197,7 +226,7 @@ jobs:
           # 单引号 here-string：不插值、反引号安全（markdown 里的 ` 不会被当转义符）。
           # 注意结束标记 '@ 必须单独占行且位于行首（YAML 块标量会剥掉公共缩进）。
           $body = @'
-          ## MDQuickViewer
+          ## MDQuickViewer __TAG__
 
           纯 C + Win32 API 的原生 Markdown 浏览器，单文件 exe，**无需附带任何 DLL**。
 
@@ -230,6 +259,7 @@ jobs:
           __MSLIST__
           ```
           '@
+          $body = $body.Replace('__TAG__',    "$env:RELEASE_TAG")
           $body = $body.Replace('__MGDLL__',  "$($mgDlls.Count)")
           $body = $body.Replace('__MSDLL__',  "$($msDlls.Count)")
           $body = $body.Replace('__MGLIST__', ($mgDlls -join "`n"))
@@ -242,10 +272,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           # action-gh-release 必须有 tag，否则报 "GitHub Releases requires a tag"。
-          # 用 `v<完整 SHA>` 作为滚动 tag：每次 main 推送都更新同一个 tag，
-          # 不会堆积出一串 release。GitHub Actions 表达式不支持 substring()，
-          # 所以 name 保持默认（就用 tag 名），不自己拼短 SHA。
-          tag_name: v${{ github.sha }}
+          # 版本号由上面的「计算下一个版本号」步骤从远端已有 v0.N 里推导，
+          # 输出为 v0.N / v0.N+1 / ... 每次 main 推送递增一个版本。
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ${{ steps.ver.outputs.name }}
           files: |
             MDQuickViewer-mingw64-x64.zip
             MDQuickViewer-msvc-x64.zip
