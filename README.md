@@ -31,13 +31,13 @@ dist/MDQuickViewer.exe docs        # 只列出该文件夹下的 Markdown 文件
 - **滚动**：`WS_VSCROLL` 滚动条 + 鼠标滚轮 + 方向键
 - **现代外观**：manifest 启用 Common Controls v6 与 Per-Monitor DPI 感知
 
-| 拖放打开 | 表格渲染 |
+| 代码语法着色 | 表格与列对齐 |
 | --- | --- |
-| ![拖放](MDQuickViewer/docs/images/screenshot-dragdrop.png) | ![表格](MDQuickViewer/docs/images/screenshot-table.png) |
+| ![代码着色](MDQuickViewer/docs/images/screenshot-code.png) | ![表格](MDQuickViewer/docs/images/screenshot-table.png) |
 
-| 文件列表（单列） | 打开对话框（记住目录） |
-| --- | --- |
-| ![文件列表](MDQuickViewer/docs/images/screenshot-filelist.png) | ![打开对话框](MDQuickViewer/docs/images/screenshot-opendialog.png) |
+| 文件列表（单列） |
+| --- |
+| ![文件列表](MDQuickViewer/docs/images/screenshot-filelist.png) |
 
 ## 快捷键
 

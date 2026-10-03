@@ -1,13 +1,14 @@
-# gomd-c — 纯 C + Win32 Markdown 浏览器
+# MDQuickViewer — 原生 Win32 Markdown 浏览器
 
-这是一个用 **纯 C + Win32 API** 实现的 Markdown 阅读器，不依赖 WebView、Electron 或任何第三方 GUI 框架。解析与 GDI 自绘全部手写，与 Go 版 gomd 渲染结果同构。
+用 **纯 C + Win32 API** 实现的 Markdown 阅读器，不依赖 WebView、Electron 或任何第三方 GUI 框架。解析、语法着色与 GDI 自绘排版全部手写，单文件 exe 约 490 KB。
 
 ## 功能特性
 
-- 原生窗口 / 工具栏 / 菜单 / 状态栏 / 文件列表
+- 原生窗口 / 工具栏 / 菜单 / 状态栏 / 左侧文件列表
 - GFM 支持：表格、任务列表、删除线
+- 代码块语法着色（关键字 / 类型 / 字符串 / 注释 / 数字 / 函数名）
 - 实时缩放（Ctrl + 滚轮，或 Ctrl +/-/0）
-- 文本拖选与复制（Ctrl+A 全选，Ctrl+C 复制）
+- 文本拖选与复制（Ctrl+A 全选，Ctrl+C 复制，右键菜单更方便）
 - 链接点击跳转（自动用默认浏览器打开）
 - 拖放文件 / 文件夹，注册表记忆上次目录
 
@@ -21,7 +22,7 @@
 
 - [x] 窗口与控件骨架
 - [x] Markdown 解析与自绘渲染
-- [x] 文件打开与预览联动
+- [x] 代码语法着色
 - [x] 文本选择与复制
 - [ ] 你自己的更多想法
 
@@ -31,9 +32,16 @@
 #include <windows.h>
 
 int WINAPI wWinMain(HINSTANCE h, HINSTANCE p, PWSTR c, int s) {
-    MessageBoxW(NULL, L"Hello, gomd-c!", L"gomd-c", MB_OK);
+    MessageBoxW(NULL, L"Hello, MDQuickViewer!", L"MDQuickViewer", MB_OK);
     return 0;
 }
+```
+
+```python
+def render(markdown: str) -> bytes:
+    """把 Markdown 渲染成位图像素。"""
+    doc = md_parse(markdown)
+    return paint(doc, width=800, height=600)
 ```
 
 ## 有序与无序列表

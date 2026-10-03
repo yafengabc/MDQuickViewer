@@ -66,6 +66,35 @@ GUI 框架。解析、语法着色与 GDI 自绘排版全部手写。
 `split_list_preview`，对负宽、零、极小、巨大、随机等上百万人次输入断言
 列表/预览宽度恒为非负且和不超过客户区宽度。编译方式见文件头注释。
 
+## 开发辅助工具
+
+`tools/scap.c` 用于自动抓取界面截图（README 里的图就是它生成的），
+`tools_bmp2png.py` 负责把 32bpp BMP 转 PNG（纯标准库，不依赖 PIL）：
+
+```bash
+export PATH="/d/msys64/ucrt64/bin:$PATH"
+
+# 编译截图工具
+gcc -O2 -std=c11 -municode tools/scap.c -o /tmp/scap.exe -mconsole -lgdi32 -luser32
+
+# 抓主界面
+/tmp/scap.exe build/MDQuickViewer.exe sample.md out.bmp 1020 720
+
+# 抓"文件列表已展开"状态（第四个参数之后传命令名）
+/tmp/scap.exe build/MDQuickViewer.exe sample.md out.bmp 1020 720 list
+
+# 转 PNG
+python tools_bmp2png.py out.bmp out.png
+```
+
+`scap` 会启动应用、等主窗口出现（用 `GetWindowThreadProcessId` 校验归属进程，
+避免抓到残留实例），再 `PrintWindow` 到内存 DIB。**抓完务必
+`taskkill //F //IM MDQuickViewer.exe`**，否则残留进程会占着 exe 导致下次
+链接报 `Permission denied`。
+
+`tools_bmp2png.py` 同时兼容 BMP 的正高度（自底向上，需倒序读行）和
+负高度（自顶向下，直接顺序读行）两种写法。
+
 ## 实现要点
 
 - **中间模型与排版分层**：`markdown.c` 只产出 `Block`/`Span`，`render.c` 负责折行、
