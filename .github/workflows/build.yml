@@ -15,6 +15,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # MDQuickViewer 用 MSYS2 UCRT64 工具链（gcc + windres）
+      # windres 由 mingw-w64-ucrt-x86_64-binutils 提供，没有独立的 windres 包。
       - name: 安装 MSYS2 UCRT64
         uses: msys2/setup-msys2@v2
         with:
@@ -23,7 +24,6 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-binutils
-            mingw-w64-ucrt-x86_64-windres
 
       - name: 构建并运行自检
         shell: msys2 {0}
@@ -60,7 +60,6 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-binutils
-            mingw-w64-ucrt-x86_64-windres
 
       - name: 构建发布版
         shell: msys2 {0}

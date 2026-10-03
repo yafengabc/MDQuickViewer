@@ -16,7 +16,7 @@ GUI 框架。解析、语法着色与 GDI 自绘排版全部手写。
 
 - `-mwindows`：把 PE 子系统设为 GUI（启动无控制台黑框）
 - `-municode`：入口用 `wWinMain` 直接拿宽字符命令行，省去手工转 argv
-- `windres`：把图标与 manifest 编成 `.res.o` 链进 exe（对应 Go 版的 `go:embed syso`）
+- `windres`：把图标与 manifest 编成 `.res.o` 链进 exe（`mingw-w64-ucrt-x86_64-binutils` 自带）
 
 ## 运行
 
@@ -78,5 +78,5 @@ GUI 框架。解析、语法着色与 GDI 自绘排版全部手写。
 - **`COLORREF` 是 `0x00BBGGRR`**：手写色值宏 `COLR()` 必须做 R/B 互换。
 - **resize 安全**：所有传给 `MoveWindow` 的宽高都先夹到 `>= 0`；`split_list_preview`
   保证列表宽 + 预览宽不超过客户区宽。
-- **消息循环**：`wWinMain` 开头无需 `LockOSThread`（那是 Go 的要求），但窗口过程里的
-  崩溃无法被 Go 式 recover 兜底，因此要显式校验尺寸。
+- **消息循环**：`wWinMain` 起的消息循环不需要绑定线程（C 里线程亲和性天然满足），
+  但窗口过程里的内存错误无法兜底，因此尺寸一律显式校验后再交给系统。
