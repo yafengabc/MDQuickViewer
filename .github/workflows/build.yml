@@ -81,7 +81,7 @@ jobs:
             src\settings.c src\dlg.c src\ui.c `
             build\mdqv.res `
             /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup `
-            comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib
+            comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib advapi32.lib
 
       - name: 验证导入表（静态 CRT 应无 api-ms-win-crt-*）
         shell: pwsh
