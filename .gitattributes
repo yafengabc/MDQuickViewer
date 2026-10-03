@@ -1,0 +1,17 @@
+# 默认按文本处理，提交时统一为 LF（消除 core.autocrlf 的平台差异）
+* text=auto
+
+# shell 脚本必须是 LF：CRLF 会让 CI 里的 ./build.sh 直接崩
+*.sh text eol=lf
+
+# GitHub Actions 的 YAML 也固定 LF，避免解析差异
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# 二进制资源，禁止任何换行/编码转换（diff 会损坏 ico 与图片）
+*.ico   binary
+*.png   binary
+*.bmp   binary
+*.exe   binary
+*.o     binary
+*.res   binary
