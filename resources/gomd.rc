@@ -1,6 +1,0 @@
-#define RT_MANIFEST 24
-#define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
-CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "gomd.manifest"
-
-// 应用图标（资源 ID 1），窗口类与资源管理器共用
-1 ICON "gomd.ico"

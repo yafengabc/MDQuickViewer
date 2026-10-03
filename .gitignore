@@ -1,17 +1,18 @@
 # 构建产物
 /dist/
+/MDQuickViewer/build/
 *.exe
+*.o
+*.res.o
 *.syso
 *.bmp
 out.log
-
-# 本地截图（开发辅助工具 scap 的临时输出）
-/shot_*.png
 
 # 编辑器
 .idea/
 .vscode/
 .workbuddy/
 
-# 渲染自检生成的 PNG
-/src/*.png
+# 渲染自检生成的临时 PNG（docs 下的正式截图要保留）
+*.png
+!MDQuickViewer/docs/images/*.png

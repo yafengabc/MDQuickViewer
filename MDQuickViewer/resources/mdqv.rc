@@ -1,0 +1,8 @@
+/* MDQuickViewer 资源：应用图标 + 通用控件 manifest + DPI 感知。 */
+#define RT_MANIFEST 24
+#define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
+
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "mdqv.manifest"
+
+/* 应用图标（资源 ID 1），主窗口与资源管理器共用同一份。 */
+1 ICON "mdqv.ico"

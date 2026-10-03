@@ -1,0 +1,96 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # MDQuickViewer 用 MSYS2 UCRT64 工具链（gcc + windres）
+      - name: 安装 MSYS2 UCRT64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-windres
+
+      - name: 构建并运行自检
+        shell: msys2 {0}
+        working-directory: MDQuickViewer
+        run: |
+          export PATH="/ucrt64/bin:$PATH"
+          gcc --version | head -1
+          ./build.sh test
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: MDQuickViewer
+          path: |
+            MDQuickViewer/build/MDQuickViewer.exe
+            MDQuickViewer/build/sample.md
+          if-no-files-found: error
+
+  # 每次 main 分支更新自动发一个 Release
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-windres
+
+      - name: 构建发布版
+        shell: msys2 {0}
+        working-directory: MDQuickViewer
+        run: |
+          export PATH="/ucrt64/bin:$PATH"
+          ./build.sh
+          # 附带 sample.md，方便"双击即看"
+          cp sample.md build/
+
+      - name: 打包 zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Force `
+            -Path MDQuickViewer/build/MDQuickViewer.exe, MDQuickViewer/build/sample.md `
+            -DestinationPath MDQuickViewer-windows-x64.zip
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: MDQuickViewer-windows-x64.zip
+          generate_release_notes: true
+          body: |
+            ## MDQuickViewer
+
+            纯 C + Win32 API 的原生 Markdown 浏览器，单文件 exe，无需附带任何 DLL。
+
+            - 解析 / 语法着色 / GDI 排版全部手写，不依赖 WebView、Electron
+            - GFM：表格、任务列表、删除线、代码块着色
+            - 自检 438 项（解析 96 / 着色 62 / 渲染 280）
+
+            下载 `MDQuickViewer-windows-x64.zip`，解压后把 `.md` 文件拖到
+            `MDQuickViewer.exe` 上即可打开。
