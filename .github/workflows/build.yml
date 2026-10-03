@@ -80,6 +80,10 @@ jobs:
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
+          # action-gh-release 必须有 tag；用 `v<短 SHA>` 让每次 main 推送
+          # 都在同一个滚动 tag 上更新，避免每次推送堆积一个 release。
+          tag_name: v${{ github.sha }}
+          name: MDQuickViewer ${{ github.sha.substring(0, 7) }}
           files: MDQuickViewer-windows-x64.zip
           generate_release_notes: true
           body: |
