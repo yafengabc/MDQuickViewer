@@ -33,24 +33,41 @@ jobs:
           gcc --version | head -1
           ./build.sh test
 
+      # 把导入表落成文本文件随 artifact 一起上传。
+      # 这样 release job 不需要再配置 MSVC/MinGW 工具链去跑 dumpbin/objdump
+      # —— 之前把 dumpbin 放在 release job 里，那台 runner 上根本没配 MSVC 环境，
+      # 命令找不到必定失败。objdump 由上面已装的 binutils 提供。
+      - name: 记录导入表
+        shell: msys2 {0}
+        working-directory: MDQuickViewer
+        run: |
+          export PATH="/ucrt64/bin:$PATH"
+          # objdump -p 会在 Import / Delay Import / Bound Import 等多张表里
+          # 重复打印同一个 DLL 名，所以要 sort -u 去重。
+          objdump -p build/MDQuickViewer.exe \
+            | sed -n 's/^[[:space:]]*DLL Name:[[:space:]]*//p' \
+            | tr 'A-Z' 'a-z' | sort -u > build/deps-mingw64.txt
+          echo "=== mingw64 导入表 ==="
+          cat build/deps-mingw64.txt
+          echo "共 $(wc -l < build/deps-mingw64.txt) 个 DLL"
+
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: MDQuickViewer
+          name: MDQuickViewer-mingw64
           path: |
             MDQuickViewer/build/MDQuickViewer.exe
             MDQuickViewer/build/sample.md
+            MDQuickViewer/build/deps-mingw64.txt
           if-no-files-found: error
 
-  # MSVC + 静态 CRT（/MT）构建。
-  # 目的不是替代 gcc，而是证明源码可移植、并且提供一个不带
-  # api-ms-win-crt-* 转发器依赖的二进制选项。
+  # MSVC + 静态 CRT（/MT）构建，产出 Release 里的"零 CRT 依赖"版本。
+  # 既然是对外发布的可选二进制，就不能允许静默失败——release job 依赖它，
+  # 这里失败会直接拦住 Release，避免只发一个版本。
   # 注意：Win32 系统 DLL（kernel32/user32/gdi32/comctl32/...）**无法**静态链接，
   # 微软不提供它们的静态库；/MT 只能把 C 运行时静态进 exe。
   msvc:
     runs-on: windows-latest
-    # 允许失败：MSVC 路线是可选增量，挂了不影响 gcc 主线与 Release
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +100,7 @@ jobs:
             /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup `
             comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib advapi32.lib
 
+      # dumpbin 只在这个 job 用（MSVC 环境已配好），结果落盘给 release job 读。
       - name: 验证导入表（静态 CRT 应无 api-ms-win-crt-*）
         shell: pwsh
         run: |
@@ -90,12 +108,16 @@ jobs:
           if (-not (Test-Path $exe)) { throw "未生成 $exe" }
           $dump = & dumpbin /nologo /dependents $exe
           $dump | Write-Host
-          $crt = $dump | Select-String 'api-ms-win-crt|vcruntime|ucrtbase'
-          if ($crt) {
-            Write-Host "注意：仍存在 CRT 动态依赖 -> $($crt -join ', ')"
-          } else {
-            Write-Host "OK: 无 CRT 动态依赖（/MT 静态链接生效）"
+          # dumpbin /dependents 的依赖清单形如 "    KERNEL32.dll"（缩进 + 文件名）。
+          # 结尾留 \r? 兜底：原生命令输出在某些 shell 下可能残留回车。
+          $dlls = @($dump | Select-String '^\s+\S+\.dll\r?\s*$' |
+                    ForEach-Object { $_.Line.Trim().ToLower() } | Sort-Object -Unique)
+          $dlls | Set-Content -Path "MDQuickViewer\build\deps-msvc.txt" -Encoding UTF8
+          $crt = @($dlls | Where-Object { $_ -like 'api-ms-win-crt*' -or $_ -like '*vcruntime*' -or $_ -like '*ucrtbase*' })
+          if ($crt.Count -ne 0) {
+            throw "仍有 CRT 动态依赖（/MT 未生效）: $($crt -join ', ')"
           }
+          "OK: 无 CRT 动态依赖（/MT 静态链接生效），共 $($dlls.Count) 个 Win32 系统 DLL" | Out-Host
           # Win32 系统 DLL 必然还在，这是预期行为（无法静态链接）
           Get-Item $exe | Select-Object Name, Length
 
@@ -103,43 +125,118 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MDQuickViewer-msvc
-          path: MDQuickViewer/build/MDQuickViewer-msvc.exe
-          if-no-files-found: warn
+          path: |
+            MDQuickViewer/build/MDQuickViewer-msvc.exe
+            MDQuickViewer/build/deps-msvc.txt
+          if-no-files-found: error
 
-  # 每次 main 分支更新自动发一个 Release
+  # 每次 main 分支更新自动发一个 Release（含 mingw64 与 msvc 两个可选版本）
   release:
-    needs: build
+    needs: [build, msvc]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
     permissions:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: msys2/setup-msys2@v2
+      # 直接复用 build / msvc 两个 job 的产物，不重复构建
+      - name: 下载 mingw64 产物
+        uses: actions/download-artifact@v4
         with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-binutils
+          name: MDQuickViewer-mingw64
+          path: dist-mingw64
 
-      - name: 构建发布版
-        shell: msys2 {0}
-        working-directory: MDQuickViewer
+      - name: 下载 msvc 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: MDQuickViewer-msvc
+          path: dist-msvc
+
+      - name: 准备两个版本的目录
+        shell: pwsh
         run: |
-          export PATH="/ucrt64/bin:$PATH"
-          ./build.sh
-          # 附带 sample.md，方便"双击即看"
-          cp sample.md build/
+          # mingw64 版
+          New-Item -ItemType Directory -Force -Path pkg\mingw64 | Out-Null
+          Copy-Item dist-mingw64\MDQuickViewer.exe   pkg\mingw64\
+          Copy-Item dist-mingw64\sample.md           pkg\mingw64\
+          # msvc 版：把 exe 改名，避免两个版本同名混淆
+          New-Item -ItemType Directory -Force -Path pkg\msvc | Out-Null
+          Copy-Item dist-msvc\MDQuickViewer-msvc.exe pkg\msvc\MDQuickViewer.exe
+          Copy-Item dist-mingw64\sample.md           pkg\msvc\
+          Get-ChildItem -Recurse pkg | Select-Object FullName, Length
 
-      - name: 打包 zip
+      - name: 打包两个 zip
         shell: pwsh
         run: |
           Compress-Archive -Force `
-            -Path MDQuickViewer/build/MDQuickViewer.exe, MDQuickViewer/build/sample.md `
-            -DestinationPath MDQuickViewer-windows-x64.zip
+            -Path pkg\mingw64\* `
+            -DestinationPath MDQuickViewer-mingw64-x64.zip
+          Compress-Archive -Force `
+            -Path pkg\msvc\* `
+            -DestinationPath MDQuickViewer-msvc-x64.zip
+          Get-ChildItem *.zip | Select-Object Name, Length
+
+      - name: 生成 Release 说明
+        shell: pwsh
+        run: |
+          # 导入表由各构建 job 用 dumpbin / objdump 落盘，这里只读文本文件，
+          # 本 job 不需要任何编译工具链。
+          $mgDlls = @(Get-Content dist-mingw64\deps-mingw64.txt | Where-Object { $_.Trim() })
+          $msDlls = @(Get-Content dist-msvc\deps-msvc.txt       | Where-Object { $_.Trim() })
+          if ($mgDlls.Count -eq 0) { throw "mingw64 导入表为空，deps-mingw64.txt 没生成？" }
+          if ($msDlls.Count -eq 0) { throw "msvc 导入表为空，deps-msvc.txt 没生成？" }
+          "=== mingw64 导入表 ($($mgDlls.Count)) ===" | Out-Host
+          $mgDlls | Out-Host
+          "=== msvc 导入表 ($($msDlls.Count)) ===" | Out-Host
+          $msDlls | Out-Host
+          $msCrt = @($msDlls | Where-Object { $_ -like 'api-ms-win-crt*' }).Count
+          "msvc 版 CRT 动态依赖数: $msCrt" | Out-Host
+          if ($msCrt -ne 0) { throw "msvc 版仍有 $msCrt 个 CRT 动态依赖，/MT 静态链接没生效" }
+          "OK: msvc 版零 CRT 动态依赖" | Out-Host
+
+          # 单引号 here-string：不插值、反引号安全（markdown 里的 ` 不会被当转义符）。
+          # 注意结束标记 '@ 必须单独占行且位于行首（YAML 块标量会剥掉公共缩进）。
+          $body = @'
+          ## MDQuickViewer
+
+          纯 C + Win32 API 的原生 Markdown 浏览器，单文件 exe，**无需附带任何 DLL**。
+
+          - 解析 / 语法着色 / GDI 排版绘制全部手写，不依赖 WebView、Electron 或任何第三方框架
+          - GFM：表格、任务列表、删除线、代码块多语言着色
+          - 源码纯 C11（无 GCC 扩展），可用 MSVC 或 MinGW-w64 编译
+          - 自检 438 项（解析 96 / 着色 62 / 渲染 280）
+
+          ### 下载（二选一，功能完全相同）
+
+          | 版本 | 导入表 | 工具链 |
+          | --- | --- | --- |
+          | `MDQuickViewer-mingw64-x64.zip` | __MGDLL__ 个 DLL | MinGW-w64 UCRT64（gcc）。**与仓库里 `./build.sh` 的产物完全一致**，适合绝大多数用户 |
+          | `MDQuickViewer-msvc-x64.zip` | __MSDLL__ 个 DLL，**0 个 CRT 依赖** | MSVC `/MT`，CRT 已静态链入。**导入表最干净**，适合对运行时依赖敏感的场景 |
+
+          两种版本都只依赖 Windows 自带组件，解压后把 `.md` 文件拖到
+          `MDQuickViewer.exe` 上即可打开（也支持命令行传参）。
+
+          > 两者唯一区别是 C 运行时的链接方式。Win32 系统 DLL（kernel32 / user32 /
+          > gdi32 / comctl32 / comdlg32 / shell32 / ole32 / advapi32）**无法**静态
+          > 链接——微软不提供它们的静态库，这是操作系统接口的本质。
+
+          本次构建的导入表：
+
+          ```
+          mingw64:
+          __MGLIST__
+
+          msvc:
+          __MSLIST__
+          ```
+          '@
+          $body = $body.Replace('__MGDLL__',  "$($mgDlls.Count)")
+          $body = $body.Replace('__MSDLL__',  "$($msDlls.Count)")
+          $body = $body.Replace('__MGLIST__', ($mgDlls -join "`n"))
+          $body = $body.Replace('__MSLIST__', ($msDlls -join "`n"))
+          Set-Content -Path release-body.md -Value $body -Encoding UTF8
+          "--- release-body.md ---" | Out-Host
+          Get-Content release-body.md | Out-Host
 
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
@@ -149,16 +246,9 @@ jobs:
           # 不会堆积出一串 release。GitHub Actions 表达式不支持 substring()，
           # 所以 name 保持默认（就用 tag 名），不自己拼短 SHA。
           tag_name: v${{ github.sha }}
-          files: MDQuickViewer-windows-x64.zip
-          generate_release_notes: true
-          body: |
-            ## MDQuickViewer
-
-            纯 C + Win32 API 的原生 Markdown 浏览器，单文件 exe，无需附带任何 DLL。
-
-            - 解析 / 语法着色 / GDI 排版全部手写，不依赖 WebView、Electron
-            - GFM：表格、任务列表、删除线、代码块着色
-            - 自检 438 项（解析 96 / 着色 62 / 渲染 280）
-
-            下载 `MDQuickViewer-windows-x64.zip`，解压后把 `.md` 文件拖到
-            `MDQuickViewer.exe` 上即可打开。
+          files: |
+            MDQuickViewer-mingw64-x64.zip
+            MDQuickViewer-msvc-x64.zip
+          # 用 body_path 而非 body：导入表数字要读构建 job 落盘的文件才知道，
+          # 无法在 YAML 里内联。body 和 body_path 只能给一个。
+          body_path: release-body.md

@@ -18,7 +18,9 @@ CFLAGS="-O2 -Wall -Wextra -Wno-unused-parameter -std=c11 -D_WIN32_WINNT=0x0601 -
 # -municode: 入口用 wWinMain（宽字符命令行，省去手工转 argv）
 # -mwindows:  PE 子系统设为 GUI
 LDFLAGS="-municode -mwindows"
-LIBS="-lcomctl32 -lgdi32 -luser32 -lshell32 -lshlwapi -lole32 -luuid"
+# advapi32: settings.c 用注册表 API（RegOpenKeyExW / RegQueryValueExW / RegSetValueExW ...）
+# 之前漏了它，gcc 靠符号解析侥幸链接成功；MSVC 侧会直接报 LNK2019 未解析符号。
+LIBS="-lcomctl32 -lgdi32 -luser32 -lshell32 -lshlwapi -lcomdlg32 -lole32 -luuid -ladvapi32"
 
 mkdir -p build
 
