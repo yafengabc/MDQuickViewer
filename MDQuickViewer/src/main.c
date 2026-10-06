@@ -7,6 +7,7 @@
 #include "markdown_test.h"
 #include "highlight_test.h"
 #include "render_test.h"
+#include "cjk_path_test.h"
 #include <windows.h>
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmdline, int show) {
@@ -16,7 +17,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmdline, int show) {
 
     /* 自检模式：跑测试后退出。 */
     if (cmdline && (wcscmp(cmdline, L"--test-md") == 0 || wcscmp(cmdline, L"--test-hl") == 0 ||
-                    wcscmp(cmdline, L"--test-render") == 0 || wcscmp(cmdline, L"--test") == 0)) {
+                    wcscmp(cmdline, L"--test-render") == 0 ||
+                    wcscmp(cmdline, L"--test-cjk") == 0 ||
+                    wcscmp(cmdline, L"--test") == 0)) {
         int rc = 0;
         if (wcscmp(cmdline, L"--test-md") == 0) {
             rc |= md_tests_run();
@@ -24,10 +27,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE prev, PWSTR cmdline, int show) {
             rc |= hl_tests_run();
         } else if (wcscmp(cmdline, L"--test-render") == 0) {
             rc |= rd_tests_run();
+        } else if (wcscmp(cmdline, L"--test-cjk") == 0) {
+            rc |= cjk_path_tests_run();
         } else {
             rc |= md_tests_run();
             rc |= hl_tests_run();
             rc |= rd_tests_run();
+            rc |= cjk_path_tests_run();
         }
         return rc;
     }

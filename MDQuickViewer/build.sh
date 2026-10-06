@@ -43,7 +43,7 @@ echo "[3/5] 编译 MDQuickViewer.exe"
 $CC $CFLAGS $LDFLAGS -o build/MDQuickViewer.exe \
     src/main.c src/win32.c src/markdown.c src/markdown_test.c \
     src/highlight.c src/highlight_test.c src/render.c src/render_test.c \
-    src/settings.c src/dlg.c src/ui.c \
+    src/settings.c src/dlg.c src/ui.c src/cjk_path_test.c \
     build/mdqv.res.o $LIBS
 
 echo "[4/5] 复制 sample.md 到产物目录（无参数启动回退）"

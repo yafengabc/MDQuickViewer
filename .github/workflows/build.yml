@@ -95,7 +95,7 @@ jobs:
             /Fo:build\ /Fe:build\MDQuickViewer-msvc.exe `
             src\main.c src\win32.c src\markdown.c src\markdown_test.c `
             src\highlight.c src\highlight_test.c src\render.c src\render_test.c `
-            src\settings.c src\dlg.c src\ui.c `
+            src\settings.c src\dlg.c src\ui.c src\cjk_path_test.c `
             build\mdqv.res `
             /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup `
             comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib advapi32.lib
@@ -244,7 +244,7 @@ jobs:
           - 解析 / 语法着色 / GDI 排版绘制全部手写，不依赖 WebView、Electron 或任何第三方框架
           - GFM：表格、任务列表、删除线、代码块多语言着色
           - 源码纯 C11（无 GCC 扩展），可用 MSVC 或 MinGW-w64 编译
-          - 自检 438 项（解析 96 / 着色 62 / 渲染 280）
+          - 自检 466 项（解析 96 / 着色 62 / 渲染 280 / 中文路径 28）
 
           ### 下载（二选一，功能完全相同）
 

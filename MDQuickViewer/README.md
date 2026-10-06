@@ -13,7 +13,7 @@ GUI 框架。解析、语法着色与 GDI 自绘排版全部手写。
 
 ```bash
 ./build.sh            # 构建 build/MDQuickViewer.exe
-./build.sh test       # 构建并跑全部自检（解析/着色/渲染/选择，共 438 项）
+./build.sh test       # 构建并跑全部自检（解析/着色/渲染/选择/中文路径，共 466 项）
 ```
 
 编译选项说明：

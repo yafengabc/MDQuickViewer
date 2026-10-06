@@ -72,7 +72,6 @@ static App g;
 /* 前向声明 */
 static void set_status(const char *fmt, ...);
 static void populate_list(const char *folder);
-static void load_file(const char *path);
 static void relayout(void);
 static void layout_children(void);
 static void clamp_scroll(void);
@@ -271,21 +270,52 @@ static void highlight_in_list(const char *path) {
 }
 
 /* ----------------------------------------------------------- 加载文件 */
-static void load_file(const char *path) {
-    FILE *f = fopen(path, "rb");
+/* 读整个文件到 malloc 的缓冲（末尾补 '\0'）。成功返回指针，失败返回 NULL。
+ * 路径是 UTF-8；必须 _wfopen + UTF-8→UTF-16 转宽字符，**不能用 ANSI fopen**：
+ * ANSI 版会把 UTF-8 字节按当前代码页（GBK/CP936）解释，中文路径必然失败。
+ * 单独抽出来是为了让中文路径回归测试能直接覆盖这段代码，不必依赖窗口。 */
+char *ui_read_file(const char *path, long *out_len) {
+    wchar_t *wpath = u8s(path);
+    FILE *f = wpath ? _wfopen(wpath, L"rb") : NULL;
     if (!f) {
-        MessageBoxW(g.main, L"无法读取文件", L"MDQuickViewer", MB_ICONERROR);
-        return;
+        u16free(wpath);
+        return NULL;
     }
+    u16free(wpath);
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (sz < 0) { fclose(f); return; }
+    if (sz < 0) { fclose(f); return NULL; }
     char *buf = (char *)malloc((size_t)sz + 1);
-    if (!buf) { fclose(f); return; }
+    if (!buf) { fclose(f); return NULL; }
     size_t rd = fread(buf, 1, (size_t)sz, f);
     buf[rd] = '\0';
     fclose(f);
+    if (out_len) *out_len = (long)rd;
+    return buf;
+}
+
+void ui_load_file(const char *path) {
+    long sz = 0;
+    char *buf = ui_read_file(path, &sz);
+    if (!buf) {
+        /* 带上路径和 Win32 错误码，否则「打不开」无从排查。 */
+        wchar_t werr[64];
+        swprintf(werr, sizeof(werr) / sizeof(werr[0]), L"\n\n(GetLastError=%lu)", GetLastError());
+        wchar_t *wpath = u8s(path);
+        /* UTF-8 路径的字节数 >= 宽字符数（UTF-16 码元不会多于字节），加余量。 */
+        size_t cap = ((size_t)u8len(path) + 96) * sizeof(wchar_t);
+        wchar_t *wmsg = (wchar_t *)LocalAlloc(LMEM_FIXED, cap);
+        if (wmsg) {
+            wcscpy(wmsg, L"无法读取文件：\n");
+            if (wpath) wcscat(wmsg, wpath);
+            wcscat(wmsg, werr);
+            MessageBoxW(g.main, wmsg, L"MDQuickViewer", MB_ICONERROR);
+            LocalFree(wmsg);
+        }
+        u16free(wpath);
+        return;
+    }
 
     Doc *d = md_parse(buf, path);
     free(buf);
@@ -484,7 +514,7 @@ static void on_command(int id) {
                 dirname_of(p, dir, sizeof(dir));
                 settings_save_last_folder(dir);
                 populate_list(dir);
-                load_file(p);
+                ui_load_file(p);
                 free(p);
             }
             break;
@@ -499,7 +529,7 @@ static void on_command(int id) {
             break;
         }
         case IDM_RELOAD:
-            if (g.doc && g.doc->path) load_file(g.doc->path);
+            if (g.doc && g.doc->path) ui_load_file(g.doc->path);
             break;
         case IDM_COPY:       copy_selection(); break;
         case IDM_SELECTALL:   select_all_text(); break;
@@ -521,7 +551,7 @@ static void on_keydown(WPARAM wp) {
         case 'L': if (ctrl) on_command(IDM_TOGGLELIST); break;
         case 'C': if (ctrl) copy_selection(); break;
         case 'A': if (ctrl) select_all_text(); break;
-        case VK_F5: if (g.doc && g.doc->path) load_file(g.doc->path); break;
+        case VK_F5: if (g.doc && g.doc->path) ui_load_file(g.doc->path); break;
         case '=': if (ctrl) zoom(1.1); break;
         case '+': if (ctrl) zoom(1.1); break;
         case '-': if (ctrl) zoom(1.0 / 1.1); break;
@@ -552,7 +582,7 @@ static void on_drop_files(HDROP hdrop) {
                     dirname_of(p, dir, sizeof(dir));
                     settings_save_last_folder(dir);
                     populate_list(dir);
-                    load_file(p);
+                    ui_load_file(p);
                 }
                 free(p);
             }
@@ -567,7 +597,7 @@ static void on_list_notify(UINT code) {
         if (i >= 0 && i < g.nfiles) {
             char full[4096];
             snprintf(full, sizeof(full), "%s\\%s", g.folder, g.files[i]);
-            load_file(full);
+            ui_load_file(full);
         }
     }
 }
@@ -1042,7 +1072,7 @@ static void open_from_args(void) {
                 dirname_of(p, dir, sizeof(dir));
                 settings_save_last_folder(dir);
                 populate_list(dir);
-                load_file(p);
+                ui_load_file(p);
             }
             free(p);
             handled = 1;
@@ -1052,19 +1082,31 @@ static void open_from_args(void) {
     }
     if (handled) return;
 
-    /* 没有参数：回退到 exe 旁 sample.md */
-    char exepath[MAX_PATH];
-    if (GetModuleFileNameA(NULL, exepath, MAX_PATH)) {
-        char dir[MAX_PATH];
-        dirname_of(exepath, dir, sizeof(dir));
-        char sample[MAX_PATH + 16];
-        snprintf(sample, sizeof(sample), "%s\\sample.md", dir);
-        WIN32_FIND_DATAA fd;
-        HANDLE h = FindFirstFileA(sample, &fd);
-        if (h != INVALID_HANDLE_VALUE) {
-            FindClose(h);
-            populate_list(dir);
-            load_file(sample);
+    /* 没有参数：回退到 exe 旁 sample.md。
+     * 全程用宽字符：exe 可能装在中文路径下（"D:\下载\MDQuickViewer.exe"），
+     * ANSI 版 API 在那里同样会失败。 */
+    wchar_t wexe[MAX_PATH];
+    if (GetModuleFileNameW(NULL, wexe, MAX_PATH)) {
+        wchar_t *wsample = (wchar_t *)LocalAlloc(LMEM_FIXED, (MAX_PATH + 16) * sizeof(wchar_t));
+        if (wsample) {
+            wcscpy(wsample, wexe);
+            wchar_t *wbs = wcsrchr(wsample, L'\\');
+            if (wbs) wcscpy(wbs + 1, L"sample.md");
+            WIN32_FIND_DATAW fd;
+            HANDLE h = FindFirstFileW(wsample, &fd);
+            if (h != INVALID_HANDLE_VALUE) {
+                FindClose(h);
+                char *sample = w16to8(wsample);
+                if (sample) {
+                    /* dirname_of 按 UTF-8 处理，这里传回的正是 UTF-8 */
+                    char dir[4096];
+                    dirname_of(sample, dir, sizeof(dir));
+                    populate_list(dir);
+                    ui_load_file(sample);
+                    free(sample);
+                }
+            }
+            LocalFree(wsample);
         }
     }
 }
