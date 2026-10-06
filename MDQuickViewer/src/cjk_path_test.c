@@ -254,7 +254,18 @@ int cjk_path_tests_run(void) {
                     if (found) break;
                 }
                 CHECK(found, "h1 标题含中文（UTF-8 未损坏）");
-                /* 路径本身也要原样保存在 Doc 里（状态栏/最近目录会用） */
+                /* 路径本身也要原样保存在 Doc 里（状态栏/最近目录会用）。
+                 * 失败时把双方字节打出来 —— MSVC 侧曾经因为 _strdup 的 ANSI
+                 * 语义把中文破坏掉，光看"失败"看不出存成了什么。 */
+                if (!(d->path && strstr(d->path, "\xe4\xb8\xad\xe6\x96\x87") != NULL)) {
+                    tout("    [诊断] 传入路径: ");
+                    for (const unsigned char *q = (const unsigned char *)u8path; *q; q++)
+                        tout("%02X ", *q);
+                    tout("\n    [诊断] Doc.path : ");
+                    for (const unsigned char *q = (const unsigned char *)(d->path ? d->path : ""); *q; q++)
+                        tout("%02X ", *q);
+                    tout("\n");
+                }
                 CHECK(d->path && strstr(d->path, "\xe4\xb8\xad\xe6\x96\x87") != NULL,
                       "Doc.path 保留中文路径（未被 ANSI 转换破坏）");
                 md_doc_free(d);
