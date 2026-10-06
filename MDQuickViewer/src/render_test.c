@@ -1,4 +1,4 @@
-/* GDI 渲染层测试。
+﻿/* GDI 渲染层测试。
  *
  * 用法：MDQuickViewer.exe --test-render
  *

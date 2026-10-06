@@ -1,4 +1,4 @@
-/* 代码语法着色实现。配色沿用 Go 版的 GitHub Light 主题。
+﻿/* 代码语法着色实现。配色沿用 Go 版的 GitHub Light 主题。
  *
  * 结构与 Go 版 highlight.go 一一对应：语言表 → 词法主循环。
  */

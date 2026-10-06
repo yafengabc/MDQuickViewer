@@ -1,4 +1,4 @@
-/* 语法着色测试 */
+﻿/* 语法着色测试 */
 #include "highlight_test.h"
 #include "highlight.h"
 #include <stdarg.h>

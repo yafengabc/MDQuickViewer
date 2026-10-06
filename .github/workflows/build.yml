@@ -90,7 +90,11 @@ jobs:
         shell: pwsh
         working-directory: MDQuickViewer
         run: |
-          cl /nologo /W3 /O2 /std:c11 /MT /GS /DUNICODE /D_UNICODE `
+          # /utf-8 必须加：源文件是 UTF-8 无 BOM，MSVC 在英文 locale 的
+          # runner 上默认按本地代码页读源文件，宽字符字面量里的中文会被解析成
+          # 乱码，转 UTF-8 后变成双重编码。gcc 一直是按 UTF-8 读源码的，
+          # 所以这个差异只在 MSVC 侧暴露。
+          cl /nologo /W3 /O2 /std:c11 /MT /GS /utf-8 /DUNICODE /D_UNICODE `
             /D_CRT_SECURE_NO_WARNINGS /DWIN32_LEAN_AND_MEAN `
             /Fo:build\ /Fe:build\MDQuickViewer-msvc.exe `
             src\main.c src\win32.c src\markdown.c src\markdown_test.c `

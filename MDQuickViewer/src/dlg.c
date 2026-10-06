@@ -1,4 +1,4 @@
-/* 打开文件 / 文件夹对话框：用系统通用对话框（GetOpenFileNameW /
+﻿/* 打开文件 / 文件夹对话框：用系统通用对话框（GetOpenFileNameW /
  * SHBrowseForFolderW），比自绘对话框更可靠、外观与系统一致。 */
 #include "dlg.h"
 #include "win32.h"

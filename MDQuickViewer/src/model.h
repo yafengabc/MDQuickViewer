@@ -1,4 +1,4 @@
-/* 文档中间模型：与 Go 版 render.go 的 Span/Block/TableData 同构。
+﻿/* 文档中间模型：与 Go 版 render.go 的 Span/Block/TableData 同构。
  *
  * 内存策略：所有 Span 的 text 字段都指向 md_doc 的字符串池（不单独 malloc），
  * Block 数组一次性分配。释放时统一 md_doc_free()，避免各处 free 遗漏。

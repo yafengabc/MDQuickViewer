@@ -1,4 +1,4 @@
-/* GDI 渲染实现。排版 + 自绘 + 双缓冲。 */
+﻿/* GDI 渲染实现。排版 + 自绘 + 双缓冲。 */
 #include "render.h"
 #include "highlight.h"
 #include <stdio.h>

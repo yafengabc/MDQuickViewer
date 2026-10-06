@@ -1,4 +1,4 @@
-/* 中文（含非 ASCII）路径端到端回归测试。
+﻿/* 中文（含非 ASCII）路径端到端回归测试。
  *
  * 背景：本项目内部路径统一存 UTF-8，而 ANSI 版 Win32 API
  * （fopen / FindFirstFileA / GetModuleFileNameA）会把 UTF-8 字节按当前

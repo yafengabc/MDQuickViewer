@@ -1,4 +1,4 @@
-/* Markdown 解析器：把源码转成扁平的块序列（Doc）。
+﻿/* Markdown 解析器：把源码转成扁平的块序列（Doc）。
  *
  * 与 Go 版（goldmark）行为对齐的要点：
  *  - 列表/引用在解析阶段就摊平成带 indent/marker 的块，渲染层无需递归容器；

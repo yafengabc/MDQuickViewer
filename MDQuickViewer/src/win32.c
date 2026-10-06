@@ -1,4 +1,4 @@
-/* UTF-8 ↔ UTF-16 转换与 UTF-8 字节切片工具。
+﻿/* UTF-8 ↔ UTF-16 转换与 UTF-8 字节切片工具。
  *
  * Go 版直接用 string（内部 UTF-8）和 windows.UTF16FromString，切片是按字节的
  * （goldmark 的 Segment.Start/Stop 就是字节偏移）。C 版没有 slice，必须显式

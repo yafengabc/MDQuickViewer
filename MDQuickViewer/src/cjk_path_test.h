@@ -1,4 +1,4 @@
-#ifndef GOMD_CJK_PATH_TEST_H
+﻿#ifndef GOMD_CJK_PATH_TEST_H
 #define GOMD_CJK_PATH_TEST_H
 
 /* 中文（非 ASCII）路径回归测试，全通过返回 0。

@@ -1,4 +1,4 @@
-/* MDQuickViewer 共用声明：Win32 头、comctl32、少量工具宏。
+﻿/* MDQuickViewer 共用声明：Win32 头、comctl32、少量工具宏。
  *
  * 编译方式（MSYS2 UCRT64）：
  *   gcc -municode -mwindows ... -lcomctl32 -lgdi32 -luser32 -lshell32

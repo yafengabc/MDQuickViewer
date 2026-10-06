@@ -1,4 +1,4 @@
-/* 截图工具：启动 MDQuickViewer 并把窗口/客户区抓成 BMP。
+﻿/* 截图工具：启动 MDQuickViewer 并把窗口/客户区抓成 BMP。
  *
  * 沙箱里没有交互桌面，但可以：
  *   1. 启动 MDQuickViewer.exe <sample.md>

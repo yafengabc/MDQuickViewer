@@ -1,4 +1,4 @@
-/* GDI 渲染：排版（layout）+ 自绘（paint）+ 双缓冲。
+﻿/* GDI 渲染：排版（layout）+ 自绘（paint）+ 双缓冲。
  *
  * 与 Go 版 render.go 的对应关系：
  *   layout()      → rd_layout()

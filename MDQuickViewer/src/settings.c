@@ -1,4 +1,4 @@
-/* 注册表读写实现：HKCU\Software\MDQuickViewer\LastFolder（REG_SZ）。
+﻿/* 注册表读写实现：HKCU\Software\MDQuickViewer\LastFolder（REG_SZ）。
  * 走 advapi32，与 Go 版的 regGetString/regSetString 等价。 */
 #include "settings.h"
 #include "win32.h"

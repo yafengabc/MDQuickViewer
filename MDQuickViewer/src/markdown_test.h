@@ -1,4 +1,4 @@
-#ifndef GOMD_MARKDOWN_TEST_H
+﻿#ifndef GOMD_MARKDOWN_TEST_H
 #define GOMD_MARKDOWN_TEST_H
 
 /* 跑 Markdown 解析器自检，全通过返回 0。 */

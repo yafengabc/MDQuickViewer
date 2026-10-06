@@ -1,4 +1,4 @@
-/* Markdown 解析器测试。
+﻿/* Markdown 解析器测试。
  *
  * 用法：MDQuickViewer.exe --test-md
  * 之所以做成可执行程序而不是独立测试二进制，是因为整个工程就是一个 GUI

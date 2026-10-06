@@ -1,4 +1,4 @@
-/* 文件 / 文件夹选择对话框。
+﻿/* 文件 / 文件夹选择对话框。
  * 返回 malloc 的 UTF-8 路径；用户取消返回 NULL，调用方需 free。 */
 #ifndef GOMD_DLG_H
 #define GOMD_DLG_H

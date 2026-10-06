@@ -28,15 +28,25 @@ CI 里另有一个 MSVC 构建，产出**零 CRT 动态依赖**的版本（`/MT`
 
 ```powershell
 rc /nologo /fo build\mdqv.res resources\mdqv.rc
-cl /nologo /W3 /O2 /std:c11 /MT /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN `
+cl /nologo /W3 /O2 /std:c11 /MT /utf-8 /DUNICODE /D_UNICODE /DWIN32_LEAN_AND_MEAN `
   /Fo:build\ /Fe:build\MDQuickViewer.exe `
   src\*.c build\mdqv.res `
   /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup `
   comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib advapi32.lib
 ```
 
-注意链接列表末尾的 `advapi32.lib`：`src/settings.c` 用注册表 API，漏了会报 `LNK2019`。
-gcc 侧靠符号解析侥幸能链上，**换工具链才是照妖镜**。
+两个容易漏的选项：
+
+- **`advapi32.lib`**：`src/settings.c` 用注册表 API，漏了会报 `LNK2019`。
+  gcc 侧靠符号解析侥幸能链上，**换工具链才是照妖镜**。
+- **`/utf-8`**：源码是 UTF-8 编码，MSVC 默认按本地代码页读源文件，
+  宽字符字面量里的中文（弹窗文案、测试数据）会被解析成乱码。
+  在非中文 locale 的机器上编译尤其明显。仓库里的 `.c` / `.h` 都带
+  UTF-8 BOM，所以省掉 `/utf-8` 通常也能过，但**显式加上更保险**。
+
+同理，**不要用 `_strdup` / `_stricmp`**（MSVCRT 按本地代码页处理字符，
+中文 UTF-8 会被破坏）；`win32.c` 里的 `u8dup` / `u8stricmp_ascii` 是
+字节安全版本。
 
 ## 运行
 

@@ -1,4 +1,4 @@
-/* 注册表：记忆上次打开的目录（HKCU\Software\MDQuickViewer\LastFolder，REG_SZ）。
+﻿/* 注册表：记忆上次打开的目录（HKCU\Software\MDQuickViewer\LastFolder，REG_SZ）。
  *
  * 测试可用环境变量 MDQV_REG_KEY 把子键
  * 重定向到 Software\MDQuickViewer_test，避免污染真实配置、也避免多个测试相互干扰。

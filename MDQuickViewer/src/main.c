@@ -1,4 +1,4 @@
-/* MDQuickViewer 入口。
+﻿/* MDQuickViewer 入口。
  *   - 自检模式（--test / --test-md / --test-hl / --test-render）：跑测试后退出。
  *     GUI 子系统的 stdout 不保证接到调用方管道，所以测试内部会写
  *     %TEMP%\MDQuickViewer-test.log，构建脚本从那里读结果。
