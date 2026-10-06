@@ -72,3 +72,33 @@ char *u8charat(const char *s, int idx) {
     }
     return NULL;
 }
+
+/* 字节安全的 strdup。MSVCRT 的 _strdup 走 ANSI 语义会把中文 UTF-8 破坏，
+ * MinGW 的 strdup 恰好字节安全 —— 所以这个坑只在 MSVC 编译时暴露。 */
+char *u8dup(const char *s) {
+    if (!s) return NULL;
+    size_t n = strlen(s);
+    char *out = (char *)malloc(n + 1);
+    if (!out) return NULL;
+    memcpy(out, s, n + 1);
+    return out;
+}
+
+/* 只在 ASCII 字母上折叠大小写；>= 0x80 的字节（UTF-8 多字节序列）原样比较。
+ * MSVCRT 的 _stricmp 在中文代码页下会按 CP936 折叠中文，
+ * 比较含中文的路径不可靠。 */
+static int lower_ascii(int c) {
+    return (c >= 'A' && c <= 'Z') ? c + ('a' - 'A') : c;
+}
+
+int u8stricmp_ascii(const char *a, const char *b) {
+    if (a == b) return 0;
+    if (!a) return -1;
+    if (!b) return 1;
+    for (;;) {
+        int ca = lower_ascii((unsigned char)*a++);
+        int cb = lower_ascii((unsigned char)*b++);
+        if (ca != cb) return ca - cb;
+        if (ca == 0) return 0;
+    }
+}

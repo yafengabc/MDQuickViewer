@@ -56,7 +56,7 @@ dist/MDQuickViewer.exe docs        # 只列出该文件夹下的 Markdown 文件
 
 ```bash
 ./build.sh            # 构建 build/MDQuickViewer.exe
-./build.sh test       # 构建并跑全部自检（解析/着色/渲染/选择/中文路径，共 466 项）
+./build.sh test       # 构建并跑全部自检（解析/着色/渲染/选择/中文路径，共 479 项）
 ```
 
 产物在 `MDQuickViewer/build/MDQuickViewer.exe`（约 490 KB，PE Subsystem=2 GUI，无控制台黑框）。
@@ -88,12 +88,12 @@ MDQuickViewer/
 cd MDQuickViewer && ./build.sh test
 ```
 
-共 **466 项**自检：
+共 **479 项**自检：
 
 - `--test-md` 解析器（96）
 - `--test-hl` 语法着色（62）
 - `--test-render` 排版 / 绘制 / 文本选择 / 着色回归（280）
-- `--test-cjk` 中文路径（28）
+- `--test-cjk` 中文路径（41）
 - `--test` 全部
 
 自检结果写入 `%TEMP%\MDQuickViewer-test.log`（GUI 子系统的 stdout 不保证接到调用方管道），

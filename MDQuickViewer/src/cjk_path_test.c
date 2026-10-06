@@ -97,6 +97,42 @@ static void rm_tree_w(const wchar_t *wdir) {
     RemoveDirectoryW(wdir);
 }
 
+/* u8dup：复制中文串必须字节不变。
+ * 这一条专门盯 MSVCRT 的 _strdup —— 它走 ANSI 语义，会把中文 UTF-8
+ * 按 CP936 转换而破坏字节（MinGW 的 strdup 恰好安全，所以只在 MSVC 暴露）。 */
+static void test_u8dup(void) {
+    static const char CJK[] =
+        "C:\\Users\\song\\Documents\\\xe4\xb8\xad\xe6\x96\x87\xe6\x96\x87\xe6\xa1\xa3\\"
+        "\xe6\xb5\x8b\xe8\xaf\x95.md";
+    char *d = u8dup(CJK);
+    CHECK(d != NULL, "u8dup 返回非 NULL");
+    if (d) {
+        CHECK(strcmp(d, CJK) == 0, "u8dup 字节完全一致（含中文）");
+        CHECK(strlen(d) == strlen(CJK), "u8dup 长度一致");
+        free(d);
+    }
+    /* 空串与 NULL */
+    char *e = u8dup("");
+    CHECK(e && e[0] == '\0', "u8dup 空串");
+    free(e);
+    CHECK(u8dup(NULL) == NULL, "u8dup(NULL) 返回 NULL");
+}
+
+/* u8stricmp_ascii：ASCII 字母折叠，非 ASCII 字节原样比较。 */
+static void test_u8stricmp_ascii(void) {
+    CHECK(u8stricmp_ascii(".md", ".MD") == 0, "后缀比较忽略大小写 (.md == .MD)");
+    CHECK(u8stricmp_ascii(".MARKDOWN", ".markdown") == 0, "后缀比较忽略大小写");
+    CHECK(u8stricmp_ascii("a.md", ".md") != 0, "不同字符串比较不为 0");
+    CHECK(u8stricmp_ascii("", "") == 0, "空串相等");
+    CHECK(u8stricmp_ascii(NULL, "x") != 0, "NULL 与非 NULL 不相等");
+    /* 中文按字节原样比较：相同则 0，不同则非 0（不依赖代码页折叠） */
+    CHECK(u8stricmp_ascii("\xe4\xb8\xad\xe6\x96\x87", "\xe4\xb8\xad\xe6\x96\x87") == 0,
+          "相同中文串相等");
+    CHECK(u8stricmp_ascii("\xe4\xb8\xad", "\xe6\x96\x87") != 0, "不同中文串不等");
+    /* 大小写折叠只作用于 ASCII，中文的大小写形式（不存在）不应被折叠 */
+    CHECK(u8stricmp_ascii("\xc3\x89", "\xc3\xa9") != 0, "非 ASCII 不做折叠");
+}
+
 int cjk_path_tests_run(void) {
     g_pass = g_fail = 0;
     /* GUI 子系统下 stdout 接不到调用方管道，追加写同一份日志 */
@@ -106,6 +142,9 @@ int cjk_path_tests_run(void) {
         g_out = _wfopen(logpath, L"a");
     }
     tout("=== 中文路径测试 ===\n");
+
+    test_u8dup();
+    test_u8stricmp_ascii();
 
     wchar_t *base = (wchar_t *)LocalAlloc(LMEM_FIXED, MAX_PATH * sizeof(wchar_t));
     GetTempPathW(MAX_PATH, base);

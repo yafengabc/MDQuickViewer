@@ -49,4 +49,14 @@ int u8count(const char *s);
 /* 取第 n 个 Unicode 字符（UTF-8 编码，可能多字节） */
 char *u8charat(const char *s, int idx);
 
+/* 字节安全的字符串复制（malloc）。**不要用 strdup/_strdup**：
+ * MSVCRT 的 _strdup 走 ANSI 语义，会按当前代码页转换，中文 UTF-8 路径
+ * 会被破坏（MinGW 的 strdup 恰好是字节安全的，所以问题只在 MSVC 侧暴露）。 */
+char *u8dup(const char *s);
+
+/* ASCII 范围内的大小写无关比较，返回 0 表示相等。**不要用 _stricmp**：
+ * MSVCRT 会按本地代码页折叠字符，在中文代码页下比较含中文的路径不可靠。
+ * 本项目只在比 ".md" 之类 ASCII 后缀、以及比较路径是否同一文件时用它。 */
+int u8stricmp_ascii(const char *a, const char *b);
+
 #endif /* GOMD_WIN32_H */

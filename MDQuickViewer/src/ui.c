@@ -114,8 +114,8 @@ static void dirname_of(const char *path, char *out, int outsz) {
 
 static int is_markdown(const char *name) {
     int len = (int)strlen(name);
-    if (len >= 3 && _stricmp(name + len - 3, ".md") == 0) return 1;
-    if (len >= 9 && _stricmp(name + len - 9, ".markdown") == 0) return 1;
+    if (len >= 3 && u8stricmp_ascii(name + len - 3, ".md") == 0) return 1;
+    if (len >= 9 && u8stricmp_ascii(name + len - 9, ".markdown") == 0) return 1;
     return 0;
 }
 
@@ -205,7 +205,7 @@ static int cmp_str(const void *a, const void *b) {
 
 static void populate_list(const char *folder) {
     if (g.folder) free(g.folder);
-    g.folder = strdup(folder);
+    g.folder = u8dup(folder);
 
     SendMessageW(g.list, LVM_DELETEALLITEMS, 0, 0);
     for (int i = 0; i < g.nfiles; i++) free(g.files[i]);
@@ -231,7 +231,7 @@ static void populate_list(const char *folder) {
             cap = cap ? cap * 2 : 16;
             tmp = (char **)realloc(tmp, (size_t)cap * sizeof(char *));
         }
-        tmp[cnt++] = strdup(name);
+        tmp[cnt++] = u8dup(name);
     } while (FindNextFileW(h, &fd));
     FindClose(h);
 
@@ -256,7 +256,7 @@ static void highlight_in_list(const char *path) {
     for (int i = 0; i < g.nfiles; i++) {
         char full[4096];
         snprintf(full, sizeof(full), "%s\\%s", g.folder, g.files[i]);
-        if (_stricmp(full, path) == 0) {
+        if (u8stricmp_ascii(full, path) == 0) {
             LVITEMW it;
             ZeroMemory(&it, sizeof(it));
             it.mask = LVIF_STATE;

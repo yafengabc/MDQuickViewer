@@ -1391,7 +1391,9 @@ Doc *md_parse(const char *src, const char *path) {
     Doc *d = (Doc *)calloc(1, sizeof(Doc));
     d->src = pooled;
     d->src_len = ni;
-    d->path = _strdup(path ? path : "");
+    /* 用字节安全的 u8dup 而不是 _strdup：MSVCRT 的 _strdup 走 ANSI 语义，
+     * 中文路径（UTF-8）会被按 CP936 转换而损坏。 */
+    d->path = u8dup(path ? path : "");
     d->blocks = p.out.d;
     d->nblock = p.out.n;
     /* 布局阶段字段留空，等 render 填充 */

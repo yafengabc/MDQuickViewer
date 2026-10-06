@@ -100,6 +100,27 @@ jobs:
             /link /SUBSYSTEM:WINDOWS /ENTRY:wWinMainCRTStartup `
             comctl32.lib gdi32.lib user32.lib shell32.lib shlwapi.lib comdlg32.lib ole32.lib uuid.lib advapi32.lib
 
+      # 必须在 MSVC 侧真的跑一遍自检。
+      # 之前只编译不跑，导致 _strdup 这类"MSVCRT 走 ANSI 语义、MinGW 恰好安全"
+      # 的问题在 CI 上完全测不出来 —— 中文路径存进 Doc.path 后字节被 CP936
+      # 转换破坏，而 MinGW 版自检全绿。跨工具链的语义差异只能靠真跑。
+      - name: 跑自检（MSVC 运行时）
+        shell: pwsh
+        run: |
+          $exe = "MDQuickViewer\build\MDQuickViewer-msvc.exe"
+          # GUI 子系统 stdout 接不到管道，测试结果写日志文件
+          $log = Join-Path $env:TEMP "MDQuickViewer-test.log"
+          Remove-Item $log -ErrorAction SilentlyContinue
+          & $exe --test
+          Start-Sleep -Seconds 2
+          if (-not (Test-Path $log)) { throw "未生成测试日志 $log，MSVC 版自检没跑起来？" }
+          Get-Content $log | Write-Host
+          # 结果行形如 "=== 结果: N 通过, M 失败 ==="，任一失败即让 job 失败
+          $fails = Select-String -Path $log -Pattern '(\d+) 失败' -AllMatches |
+                   ForEach-Object { $_.Matches } |
+                   Where-Object { [int]$_.Groups[1].Value -ne 0 }
+          if ($fails) { throw "MSVC 版自检有失败项" }
+
       # dumpbin 只在这个 job 用（MSVC 环境已配好），结果落盘给 release job 读。
       - name: 验证导入表（静态 CRT 应无 api-ms-win-crt-*）
         shell: pwsh
@@ -244,7 +265,7 @@ jobs:
           - 解析 / 语法着色 / GDI 排版绘制全部手写，不依赖 WebView、Electron 或任何第三方框架
           - GFM：表格、任务列表、删除线、代码块多语言着色
           - 源码纯 C11（无 GCC 扩展），可用 MSVC 或 MinGW-w64 编译
-          - 自检 466 项（解析 96 / 着色 62 / 渲染 280 / 中文路径 28）
+          - 自检 479 项（解析 96 / 着色 62 / 渲染 280 / 中文路径 41）
 
           ### 下载（二选一，功能完全相同）
 
